@@ -32,13 +32,13 @@ Reflected as `x-fetch-mode: skipped` in response headers when disabled.
 
 Custom data extraction using CSS selectors. Each key defines a field name, value is a rule object:
 
-| Property | Type | Description |
-|----------|------|-------------|
-| selector | string | CSS selector (Document.querySelector) |
-| selectorAll | string | CSS selector for collections (Document.querySelectorAll) |
-| attr | string | Attribute to extract: any HTML attr, `'html'`, `'outerHTML'`, `'text'`, `'markdown'`, `'val'` |
-| type | string | Value type validation: `'auto'`, `'string'`, `'number'`, `'boolean'`, `'date'`, `'image'`, `'url'`, `'audio'`, `'video'`, `'email'`, etc. |
-| evaluate | string | JavaScript to evaluate in browser context |
+| Property    | Type   | Description                                                                                                                               |
+| ----------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| selector    | string | CSS selector (Document.querySelector)                                                                                                     |
+| selectorAll | string | CSS selector for collections (Document.querySelectorAll)                                                                                  |
+| attr        | string | Attribute to extract: any HTML attr, `'html'`, `'outerHTML'`, `'text'`, `'markdown'`, `'val'`                                             |
+| type        | string | Value type validation: `'auto'`, `'string'`, `'number'`, `'boolean'`, `'date'`, `'image'`, `'url'`, `'audio'`, `'video'`, `'email'`, etc. |
+| evaluate    | string | JavaScript to evaluate in browser context                                                                                                 |
 
 Supports:
 
@@ -225,41 +225,41 @@ Free: 50 reqs/day. Headers: `x-rate-limit-limit`, `x-rate-limit-remaining`, `x-r
 
 ## Error Codes (Complete)
 
-| Code | Message | Solution |
-|------|---------|----------|
-| EAUTH | Invalid API key | Check `x-api-key` header |
-| ERATE | Daily rate limit reached | Wait for reset or upgrade |
-| EBRWSRTIMEOUT | Browser navigation timeout | Reduce page complexity or increase timeout |
-| EFATAL | Generic failure | Contact support with request `id` |
-| EFATALCLIENT | Network unreachable | Check connectivity to endpoint |
-| EFORBIDDENURL | Forbidden IP range | Only unicast IPs allowed |
-| EINVALURL | Invalid URL | Must be WHATWG URL with protocol |
-| EINVALPROXY | Invalid proxy URL | Must be parseable WHATWG URL |
-| EINVALTTL | Invalid TTL | Must be between 1m and 31d |
-| EINVALSTTL | Invalid staleTtl | Must be less than current TTL |
-| EINVALOVERLAYBG | Invalid gradient | Follow CSS gradient syntax |
-| EMAXREDIRECTS | Too many redirects | Max 10 hops allowed |
-| EPRO | Auth on free endpoint | Use pro.microlink.io for authenticated requests |
-| EPROXY | Proxy requires Pro | Upgrade plan |
-| EPROXYNEEDED | Anti-bot protection detected | Upgrade to Pro plan |
-| EFILENAME | Filename requires Pro | Upgrade plan |
-| EHEADERS | Headers requires Pro | Upgrade plan |
-| ETIMEOUT | Request timeout | Resolve before timeout limit |
-| ETTL | TTL requires Pro | Upgrade plan |
-| ESTTL | staleTtl requires Pro | Upgrade plan |
+| Code            | Message                      | Solution                                        |
+| --------------- | ---------------------------- | ----------------------------------------------- |
+| EAUTH           | Invalid API key              | Check `x-api-key` header                        |
+| ERATE           | Daily rate limit reached     | Wait for reset or upgrade                       |
+| EBRWSRTIMEOUT   | Browser navigation timeout   | Reduce page complexity or increase timeout      |
+| EFATAL          | Generic failure              | Contact support with request `id`               |
+| EFATALCLIENT    | Network unreachable          | Check connectivity to endpoint                  |
+| EFORBIDDENURL   | Forbidden IP range           | Only unicast IPs allowed                        |
+| EINVALURL       | Invalid URL                  | Must be WHATWG URL with protocol                |
+| EINVALPROXY     | Invalid proxy URL            | Must be parseable WHATWG URL                    |
+| EINVALTTL       | Invalid TTL                  | Must be between 1m and 31d                      |
+| EINVALSTTL      | Invalid staleTtl             | Must be less than current TTL                   |
+| EINVALOVERLAYBG | Invalid gradient             | Follow CSS gradient syntax                      |
+| EMAXREDIRECTS   | Too many redirects           | Max 10 hops allowed                             |
+| EPRO            | Auth on free endpoint        | Use pro.microlink.io for authenticated requests |
+| EPROXY          | Proxy requires Pro           | Upgrade plan                                    |
+| EPROXYNEEDED    | Anti-bot protection detected | Upgrade to Pro plan                             |
+| EFILENAME       | Filename requires Pro        | Upgrade plan                                    |
+| EHEADERS        | Headers requires Pro         | Upgrade plan                                    |
+| ETIMEOUT        | Request timeout              | Resolve before timeout limit                    |
+| ETTL            | TTL requires Pro             | Upgrade plan                                    |
+| ESTTL           | staleTtl requires Pro        | Upgrade plan                                    |
 
 ## Response Headers
 
-| Header | Description |
-|--------|-------------|
-| `x-pricing-plan` | `'free'` or `'pro'` |
-| `x-cache-status` | `'HIT'`, `'MISS'`, `'BYPASS'` |
-| `x-cache-ttl` | Cache TTL in milliseconds |
-| `x-fetch-mode` | `'fetch'`, `'prerender'`, `'skipped'`, `'proxy-*'` |
-| `x-fetch-time` | Time spent fetching |
-| `x-response-time` | Total response time |
-| `x-request-id` | Unique request identifier |
-| `x-rate-limit-limit` | Max requests per window |
-| `x-rate-limit-remaining` | Remaining requests |
-| `x-rate-limit-reset` | Reset time (UTC epoch seconds) |
-| `cf-cache-status` | CloudFlare edge cache status |
+| Header                   | Description                                        |
+| ------------------------ | -------------------------------------------------- |
+| `x-pricing-plan`         | `'free'` or `'pro'`                                |
+| `x-cache-status`         | `'HIT'`, `'MISS'`, `'BYPASS'`                      |
+| `x-cache-ttl`            | Cache TTL in milliseconds                          |
+| `x-fetch-mode`           | `'fetch'`, `'prerender'`, `'skipped'`, `'proxy-*'` |
+| `x-fetch-time`           | Time spent fetching                                |
+| `x-response-time`        | Total response time                                |
+| `x-request-id`           | Unique request identifier                          |
+| `x-rate-limit-limit`     | Max requests per window                            |
+| `x-rate-limit-remaining` | Remaining requests                                 |
+| `x-rate-limit-reset`     | Reset time (UTC epoch seconds)                     |
+| `cf-cache-status`        | CloudFlare edge cache status                       |

@@ -43,71 +43,71 @@ Additional HTTP info: `statusCode`, `headers`, `redirects`.
 
 ## Core Parameters
 
-| Parameter | Type | Default | Pro | Description |
-|-----------|------|---------|-----|-------------|
-| `url` | string | **required** | | Target URL (must include protocol) |
-| `screenshot` | boolean | false | | Generate screenshot |
-| `pdf` | boolean | false | | Generate PDF |
-| `video` | boolean | false | | Detect video sources |
-| `audio` | boolean | false | | Detect audio sources |
-| `meta` | boolean/object | true | | Metadata extraction (disable with `false` to speed up) |
-| `data` | object | | | Custom scraping rules (CSS selectors) |
-| `embed` | string | | | Return specific field as response body (e.g., `'screenshot.url'`) |
-| `filter` | string | | | Comma-separated fields to pick from response |
-| `prerender` | boolean/string | 'auto' | | Headless browser: `true`, `false`, or `'auto'` |
-| `iframe` | boolean/object | false | | oEmbed detection |
-| `insights` | boolean/object | false | | Lighthouse + Wappalyzer tech detection |
-| `palette` | boolean | false | | Color palette extraction |
-| `function` | string | | | Execute JS with Puppeteer page access |
+| Parameter    | Type           | Default      | Pro | Description                                                       |
+| ------------ | -------------- | ------------ | --- | ----------------------------------------------------------------- |
+| `url`        | string         | **required** |     | Target URL (must include protocol)                                |
+| `screenshot` | boolean        | false        |     | Generate screenshot                                               |
+| `pdf`        | boolean        | false        |     | Generate PDF                                                      |
+| `video`      | boolean        | false        |     | Detect video sources                                              |
+| `audio`      | boolean        | false        |     | Detect audio sources                                              |
+| `meta`       | boolean/object | true         |     | Metadata extraction (disable with `false` to speed up)            |
+| `data`       | object         |              |     | Custom scraping rules (CSS selectors)                             |
+| `embed`      | string         |              |     | Return specific field as response body (e.g., `'screenshot.url'`) |
+| `filter`     | string         |              |     | Comma-separated fields to pick from response                      |
+| `prerender`  | boolean/string | 'auto'       |     | Headless browser: `true`, `false`, or `'auto'`                    |
+| `iframe`     | boolean/object | false        |     | oEmbed detection                                                  |
+| `insights`   | boolean/object | false        |     | Lighthouse + Wappalyzer tech detection                            |
+| `palette`    | boolean        | false        |     | Color palette extraction                                          |
+| `function`   | string         |              |     | Execute JS with Puppeteer page access                             |
 
 ## Screenshot Options
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `screenshot.element` | string | | CSS selector to capture specific element |
-| `screenshot.fullPage` | boolean | false | Full scrollable page |
-| `screenshot.type` | string | 'png' | `'jpeg'` or `'png'` |
-| `screenshot.omitBackground` | boolean | false | Transparent background |
-| `screenshot.overlay` | object | | Browser chrome overlay (`browser`: `'light'`/`'dark'`, `background`: CSS gradient/color/image URL) |
-| `screenshot.codeScheme` | string | 'atom-dark' | Syntax highlighting theme |
+| Parameter                   | Type    | Default     | Description                                                                                        |
+| --------------------------- | ------- | ----------- | -------------------------------------------------------------------------------------------------- |
+| `screenshot.element`        | string  |             | CSS selector to capture specific element                                                           |
+| `screenshot.fullPage`       | boolean | false       | Full scrollable page                                                                               |
+| `screenshot.type`           | string  | 'png'       | `'jpeg'` or `'png'`                                                                                |
+| `screenshot.omitBackground` | boolean | false       | Transparent background                                                                             |
+| `screenshot.overlay`        | object  |             | Browser chrome overlay (`browser`: `'light'`/`'dark'`, `background`: CSS gradient/color/image URL) |
+| `screenshot.codeScheme`     | string  | 'atom-dark' | Syntax highlighting theme                                                                          |
 
 ## PDF Options
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `pdf.format` | string | | Page format (e.g., `'A4'`, `'Letter'`) |
-| `pdf.landscape` | boolean | false | Landscape orientation |
-| `pdf.scale` | number | | Scale factor |
-| `pdf.margin` | string/object | | Page margins |
-| `pdf.pageRanges` | string | | Pages to print (e.g., `'1-3'`) |
+| Parameter        | Type          | Default | Description                            |
+| ---------------- | ------------- | ------- | -------------------------------------- |
+| `pdf.format`     | string        |         | Page format (e.g., `'A4'`, `'Letter'`) |
+| `pdf.landscape`  | boolean       | false   | Landscape orientation                  |
+| `pdf.scale`      | number        |         | Scale factor                           |
+| `pdf.margin`     | string/object |         | Page margins                           |
+| `pdf.pageRanges` | string        |         | Pages to print (e.g., `'1-3'`)         |
 
 ## Browser Control
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `device` | string | 'macbook pro 13' | Device emulation (e.g., `'iPad'`, `'iPhone X'`) |
-| `viewport` | object | | `{ width, height, deviceScaleFactor, isMobile }` |
-| `colorScheme` | string | 'no-preference' | `'light'` or `'dark'` |
-| `javascript` | boolean | true | Enable/disable JS execution |
-| `animations` | boolean | false | Enable CSS animations |
-| `mediaType` | string | 'screen' | `'screen'` or `'print'` |
-| `click` | string/string[] | | CSS selector(s) to click |
-| `scroll` | string | | CSS selector to scroll to |
-| `scripts` | string/string[] | | Inject `<script>` (inline code or URL) |
-| `modules` | string/string[] | | Inject `<script type="module">` |
-| `styles` | string/string[] | | Inject `<style>` (inline CSS or URL) |
-| `waitUntil` | string/string[] | 'auto' | `'load'`, `'domcontentloaded'`, `'networkidle0'`, `'networkidle2'` |
-| `waitForSelector` | string | | Wait for CSS selector |
-| `waitForTimeout` | string/number | | Wait duration (e.g., `'3s'`, `3000`) |
-| `timeout` | string/number | 28s | Max request lifecycle |
+| Parameter         | Type            | Default          | Description                                                        |
+| ----------------- | --------------- | ---------------- | ------------------------------------------------------------------ |
+| `device`          | string          | 'macbook pro 13' | Device emulation (e.g., `'iPad'`, `'iPhone X'`)                    |
+| `viewport`        | object          |                  | `{ width, height, deviceScaleFactor, isMobile }`                   |
+| `colorScheme`     | string          | 'no-preference'  | `'light'` or `'dark'`                                              |
+| `javascript`      | boolean         | true             | Enable/disable JS execution                                        |
+| `animations`      | boolean         | false            | Enable CSS animations                                              |
+| `mediaType`       | string          | 'screen'         | `'screen'` or `'print'`                                            |
+| `click`           | string/string[] |                  | CSS selector(s) to click                                           |
+| `scroll`          | string          |                  | CSS selector to scroll to                                          |
+| `scripts`         | string/string[] |                  | Inject `<script>` (inline code or URL)                             |
+| `modules`         | string/string[] |                  | Inject `<script type="module">`                                    |
+| `styles`          | string/string[] |                  | Inject `<style>` (inline CSS or URL)                               |
+| `waitUntil`       | string/string[] | 'auto'           | `'load'`, `'domcontentloaded'`, `'networkidle0'`, `'networkidle2'` |
+| `waitForSelector` | string          |                  | Wait for CSS selector                                              |
+| `waitForTimeout`  | string/number   |                  | Wait duration (e.g., `'3s'`, `3000`)                               |
+| `timeout`         | string/number   | 28s              | Max request lifecycle                                              |
 
 ## Cache Control
 
-| Parameter | Type | Default | Pro | Description |
-|-----------|------|---------|-----|-------------|
-| `ttl` | string/number | '24h' | yes | Cache lifetime (1m to 31d). Formats: `'1d'`, `'24h'`, `86400000` |
-| `staleTtl` | string/number/boolean | false | yes | Serve stale while revalidating. `staleTtl=0` always revalidates |
-| `force` | boolean | false | | Bypass cache, get fresh copy |
+| Parameter  | Type                  | Default | Pro | Description                                                      |
+| ---------- | --------------------- | ------- | --- | ---------------------------------------------------------------- |
+| `ttl`      | string/number         | '24h'   | yes | Cache lifetime (1m to 31d). Formats: `'1d'`, `'24h'`, `86400000` |
+| `staleTtl` | string/number/boolean | false   | yes | Serve stale while revalidating. `staleTtl=0` always revalidates  |
+| `force`    | boolean               | false   |     | Bypass cache, get fresh copy                                     |
 
 Cache headers: `x-cache-status` (`HIT`/`MISS`/`BYPASS`), `x-cache-ttl`.
 
@@ -145,15 +145,15 @@ Supports compression (`lz#`, `gz#`, `br#` prefixes) and NPM packages: `cheerio`,
 
 ## Error Codes
 
-| Code | Cause |
-|------|-------|
-| EAUTH | Invalid API key |
-| ERATE | Daily rate limit reached |
-| EINVALURL | Invalid URL format |
-| EBRWSRTIMEOUT | Browser navigation timeout |
-| EFATAL | Generic resolution failure |
-| EPRO | Auth request sent to free endpoint |
-| ETIMEOUT | Request timeout exceeded |
+| Code          | Cause                              |
+| ------------- | ---------------------------------- |
+| EAUTH         | Invalid API key                    |
+| ERATE         | Daily rate limit reached           |
+| EINVALURL     | Invalid URL format                 |
+| EBRWSRTIMEOUT | Browser navigation timeout         |
+| EFATAL        | Generic resolution failure         |
+| EPRO          | Auth request sent to free endpoint |
+| ETIMEOUT      | Request timeout exceeded           |
 
 For complete details, see [api-reference.md](api-reference.md).
 
