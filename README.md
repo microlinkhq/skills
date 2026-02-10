@@ -43,6 +43,12 @@ Extract unified metadata from website HTML using `metascraper` rule bundles and 
 
 Retrieve normalized HTML from URLs using fetch or prerender with browserless fallbacks. Use when the user mentions `html-get`, rendered HTML extraction, JS-heavy pages, rewriting relative URLs, or preparing HTML for metascraper and scraping pipelines.
 
+### keyvhq
+
+> `npx -y skills add microlinkhq/skills/keyvhq`
+
+Build and operate Keyv-based caching and key-value storage using `@keyvhq/core` and official adapters. Use when the user mentions Keyv, keyvhq, TTL cache, namespaces, storage adapters (Redis, Mongo, MySQL, PostgreSQL, SQLite, file), or adding cache support to a Node.js module.
+
 ### youtube-dl-exec
 
 > `npx -y skills add microlinkhq/skills/youtube-dl-exec`
