@@ -1,6 +1,6 @@
 ---
 name: create-local-skill
-description: Creates a project-local skill that works in both Cursor and Claude Code. Use when the user says "create skill", "add skill", "new skill", or wants to add a reusable instruction set to the current project.
+description: Create project-local skills for Cursor and Claude Code when users ask to create, add, or update reusable repo instructions.
 ---
 
 # Create Local Skill

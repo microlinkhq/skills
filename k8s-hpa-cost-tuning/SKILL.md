@@ -1,6 +1,6 @@
 ---
 name: k8s-hpa-cost-tuning
-description: Tune Kubernetes HPA scale-up/down behavior, topology spread, and resource requests to reduce idle cluster capacity. Use when users need to audit cluster costs on a schedule, analyze post-incident scaling behavior, investigate why replicas or nodes do not scale down, or reduce over-reservation and wasted compute resources.
+description: Tune Kubernetes HPA, topology spread, requests, and scale-down behavior for cluster cost audits, incidents, replica/node issues, and over-reservation.
 ---
 
 # Kubernetes HPA Cost & Scale-Down Tuning

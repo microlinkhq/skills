@@ -1,6 +1,6 @@
 ---
 name: use-pnpm
-description: Always use pnpm as the package manager. Use when installing, adding, or removing dependencies, running scripts, or any npm/yarn/pnpm command. Replaces npm and yarn with pnpm equivalents.
+description: Use pnpm for installs, adds, removals, scripts, dlx, and frozen lockfile workflows instead of npm or yarn.
 ---
 
 # Use pnpm

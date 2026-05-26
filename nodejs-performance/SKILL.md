@@ -1,6 +1,6 @@
 ---
 name: nodejs-performance
-description: Identify, validate, and ship production-safe Node.js optimizations with execution time as the primary objective. Use when users ask to reduce latency (p50/p95/p99), improve throughput, and then reduce CPU/memory/event-loop lag/FD pressure or retry amplification, using one-PR-per-improvement workflows with benchmarks.
+description: Optimize Node.js latency, p50/p95/p99, throughput, CPU, memory, event-loop lag, FD pressure, retries, and benchmarks one PR at a time.
 ---
 
 # Node.js Performance

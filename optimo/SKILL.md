@@ -1,6 +1,6 @@
 ---
 name: optimo
-description: Optimize and convert images and videos using format-specific compression pipelines on top of ImageMagick and FFmpeg. Use when users need to reduce image or video file sizes, batch-optimize a media directory, convert between formats (JPEG, PNG, WebP, AVIF, HEIC, JXL, MP4, WebM, MOV), resize media by percentage/dimensions/target file size, strip audio tracks from videos, or output optimized images as data URLs.
+description: Optimize and convert images/videos with optimo, ImageMagick, and FFmpeg for JPEG/PNG/WebP/AVIF/HEIC/JXL/MP4/WebM/MOV, resize, mute, and data URLs.
 ---
 
 # optimo

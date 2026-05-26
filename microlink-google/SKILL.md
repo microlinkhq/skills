@@ -1,6 +1,6 @@
 ---
 name: microlink-google
-description: Query 10 Google verticals (search, news, images, videos, places, maps, shopping, scholar, patents, autocomplete) as structured data via @microlink/google. Use when users need to fetch Google search results programmatically, scrape Google SERP data, build search-powered features, retrieve Google News or Shopping data, get place/map coordinates, find academic papers, or work with any Google vertical through a unified Node.js API.
+description: Query Google search, news, images, videos, places, maps, shopping, scholar, patents, and autocomplete via @microlink/google structured data.
 ---
 
 # @microlink/google

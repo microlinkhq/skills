@@ -1,6 +1,6 @@
 ---
 name: html-get
-description: Retrieve normalized, render-ready HTML from any URL using fetch or headless prerender. Use when users need to get rendered HTML from JavaScript-heavy pages, normalize relative URLs to absolute for downstream parsing, prepare HTML for metadata extraction pipelines, or choose between fast fetch and full browser rendering per URL.
+description: Retrieve normalized HTML from URLs with fetch or headless prerender for JS pages, absolute URL rewriting, and metadata extraction pipelines.
 ---
 
 # html-get
