@@ -67,6 +67,12 @@ Retrieve normalized HTML from URLs using fetch or prerender with browserless fal
 
 Build and operate Keyv-based caching and key-value storage using `@keyvhq/core` and official adapters. Use when the user mentions Keyv, keyvhq, TTL cache, namespaces, storage adapters (Redis, Mongo, MySQL, PostgreSQL, SQLite, file), or adding cache support to a Node.js module.
 
+### run-skill
+
+> `npx -y skills add microlinkhq/skills/run-skill`
+
+Execute a remote agent skill from a skills.sh or GitHub URL without installing it on the system. Use when the user invokes `/run-skill <url>`, shares a skills.sh link, points to a SKILL.md on GitHub, or asks to run a skill one-off without adding it to their machine.
+
 ### youtube-dl-exec
 
 > `npx -y skills add microlinkhq/skills/youtube-dl-exec`
