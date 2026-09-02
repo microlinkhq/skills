@@ -69,7 +69,7 @@ Local checkout:
 | `microlink_lighthouse` | `lighthouse(url)` | Lighthouse report |
 | `microlink_search` | `search(query)` | structured Google; **requires API key** |
 | `microlink_function` | `function(url, code)` | `{ value, isFulfilled, profiling, logging }` |
-| `microlink_extract` | `extract(url, rules)` | custom MQL `data` rules; can compose screenshot/pdf/insights |
+| `microlink_extract` | `extract(url, rules)` | custom CSS rules; can compose screenshot/pdf/insights |
 
 Shared request knobs (most tools): `device`, `viewport`, `colorScheme`, `click`, `scroll`, `scripts`, `modules`, `styles`, `waitUntil`, `waitForSelector`, `waitForTimeout`, `prerender`, `adblock`, `animations`, `javascript`, `mediaType`, `ttl`, `staleTtl`, `force`, `retry`, `timeout`, `headers`, `proxy`, `filename`, `filter`.
 

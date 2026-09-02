@@ -1,12 +1,13 @@
 # Screenshot generation
 
 ```js
-const mql = require('@microlink/mql')
+import createClient from 'microlink.io'
 
-const { data } = await mql('https://example.com', {
-  screenshot: { fullPage: true, type: 'png' },
-  meta: false
+const microlink = createClient()
+const { url } = await microlink.screenshot('https://example.com', {
+  fullPage: true,
+  type: 'png'
 })
 
-console.log(data.screenshot.url)
+console.log(url)
 ```

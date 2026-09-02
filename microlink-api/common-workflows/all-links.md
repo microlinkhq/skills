@@ -1,14 +1,9 @@
 # Extract all links
 
 ```js
-const mql = require('@microlink/mql')
+import createClient from 'microlink.io'
 
-const { data } = await mql('https://example.com', {
-  data: {
-    links: { selectorAll: 'a[href]', attr: 'href', type: 'url' }
-  },
-  meta: false
-})
-
-console.log(data.links)
+const microlink = createClient()
+const links = await microlink.links('https://example.com')
+console.log(links)
 ```

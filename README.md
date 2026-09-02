@@ -23,7 +23,7 @@ Expose Microlink products to AI assistants via the `@microlink/mcp` stdio server
 
 > `npx -y skills add microlinkhq/skills/microlink-api`
 
-Call Microlink via raw MQL/HTTP for JSend envelopes, embed URLs, filter, stream/buffer, and custom query composition. Use when the user mentions `@microlink/mql`, MQL, or `api.microlink.io` query parameters. Prefer the `microlink` skill for product methods.
+Microlink HTTP API parameters, embed URLs, and query-string composition. Use when the user needs `api.microlink.io` query parameters or a direct asset URL via `embed`. Prefer the `microlink` skill for the `microlink.io` product client.
 
 ### unavatar-api
 

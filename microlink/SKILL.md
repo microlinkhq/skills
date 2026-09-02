@@ -5,9 +5,9 @@ description: Turn URLs into product results with microlink.io — metadata, mark
 
 # microlink.io
 
-The Microlink API organized into products. Each method returns a **direct result** — not a JSend envelope.
+The Microlink API organized into products. Each method returns a **direct result**.
 
-For raw MQL envelopes, `embed` URLs, `filter`, or `stream`/`buffer`, use the [microlink-api](../microlink-api/SKILL.md) skill.
+For HTTP query-parameter details, see [microlink-api](../microlink-api/SKILL.md).
 
 ## Quick Start
 
@@ -54,7 +54,7 @@ await microlink.screenshot('https://example.com', {
 | oEmbed iframe | `embed(url)` |
 | Primary video / audio | `video(url)` / `audio(url)` |
 | All links / images / videos / audios / emails | `links` / `images` / `videos` / `audios` / `emails` |
-| Custom CSS/MQL rules | `extract(url, rules)` |
+| Custom CSS rules | `extract(url, rules)` |
 | Tech stack | `technologies(url)` |
 | Lighthouse | `lighthouse(url)` |
 | Google as structured data | `search(query)` — requires `apiKey` |
@@ -122,7 +122,7 @@ const emails = await microlink.emails('https://microlink.io')
 
 ### extract(url, rules, options)
 
-Full MQL `data` rule grammar, result unwrapped:
+Custom CSS rules, result unwrapped:
 
 ```js
 const { image } = await microlink.extract('https://microlink.io', {
@@ -130,7 +130,49 @@ const { image } = await microlink.extract('https://microlink.io', {
 })
 ```
 
-Single value, `selectorAll` collections, fallback arrays, nested objects, and `evaluate` all work. See [microlink-api](../microlink-api/SKILL.md) for the rule grammar.
+Single value:
+
+```js
+{ avatar: { selector: '#avatar', attr: 'src', type: 'image' } }
+```
+
+Collection:
+
+```js
+{ stories: { selectorAll: '.titleline > a', attr: 'text' } }
+```
+
+Fallback list (first match wins):
+
+```js
+{
+  title: [
+    { selector: 'meta[property="og:title"]', attr: 'content' },
+    { selector: 'title', attr: 'text' },
+    { selector: 'h1', attr: 'text' }
+  ]
+}
+```
+
+Nested object:
+
+```js
+{
+  stats: {
+    selector: '.profile',
+    attr: {
+      followers: { selector: '.followers', type: 'number' },
+      stars: { selector: '.stars', type: 'number' }
+    }
+  }
+}
+```
+
+Evaluate JS in the page:
+
+```js
+{ version: { evaluate: 'window.next.version', type: 'string' } }
+```
 
 ### technologies / lighthouse
 
@@ -205,7 +247,7 @@ Vertical result fields (plus `html()` / `markdown()` when the result has a `url`
 
 Run JavaScript in Microlink's sandbox. Alias: `function`. If the code does not reference `page`, no browser starts.
 
-Prefer `extract` / `data` for simple DOM fields, and `styles`/`scripts`/`modules` for injection. Use `run` when you need to click, wait, compute, or `require()` a package.
+Prefer `extract` for simple DOM fields, and `styles`/`scripts`/`modules` for injection. Use `run` when you need to click, wait, compute, or `require()` a package.
 
 ```js
 const { value } = await microlink.run('https://example.com', () => 40 + 2)
