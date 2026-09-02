@@ -1,11 +1,13 @@
 ---
 name: microlink-api
-description: Use Microlink API/MQL to extract URL metadata, build link previews, capture screenshots/PDFs, scrape CSS-selected data, and avoid browser infrastructure.
+description: Call Microlink via raw MQL/HTTP for JSend envelopes, embed URLs, filter, stream/buffer, and custom query composition. Use when the user mentions @microlink/mql, MQL, api.microlink.io query parameters, or needs the raw response envelope. Prefer the microlink skill for product methods.
 ---
 
-# Microlink API
+# Microlink API (MQL)
 
-Microlink turns a URL into structured output over HTTP. It can return metadata, media assets, scraped content, and browser-rendered results.
+Low-level Microlink Query Language client. Returns a JSend envelope (`status`, `data`, `response`).
+
+Prefer the product client (`microlink.io`) when you want a direct result per product — see [microlink](../microlink/SKILL.md). This skill is for raw envelopes, `embed` URLs, `filter`, and `stream`/`buffer`.
 
 ## Quick Start
 
@@ -66,7 +68,8 @@ npm install @microlink/mql
 
 ### Runtime imports
 
-- Node.js: `const mql = require('@microlink/mql')`
+- Node.js CJS: `const mql = require('@microlink/mql')`
+- Node.js ESM: `import mql from '@microlink/mql'`
 - Edge/WinterCG: `import mql from '@microlink/mql/lightweight'`
 - Browser: `import mql from 'https://esm.sh/@microlink/mql'`
 
@@ -188,12 +191,14 @@ Common error codes: `EAUTH`, `ERATE`, `EINVALURL`, `EBRWSRTIMEOUT`, `EPRO`, `ETI
 
 ## CLI
 
+The product CLI lives in `microlink.io` (not `@microlink/cli`):
+
 ```bash
-npm install -g @microlink/cli
-microlink <url> [flags]
+npx microlink.io <url|product> [flags]
+npx microlink.io login
 ```
 
-Common flags: `--api-key`, `--pretty`, `--copy`, `--colors`.
+See [microlink](../microlink/SKILL.md) for every product as a subcommand.
 
 ## Deep Reference
 

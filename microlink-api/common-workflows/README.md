@@ -1,6 +1,6 @@
 # Microlink Common Workflows
 
-Use these workflow files as focused, copy-paste-ready recipes.
+MQL copy-paste recipes for the low-level client. For the same jobs as one-liners, use `microlink.io` product methods (`markdown()`, `screenshot()`, `links()`, …) — see the [microlink](../../microlink/SKILL.md) skill.
 
 - [metadata.md](metadata.md): extract normalized metadata from a URL
 - [screenshot.md](screenshot.md): generate a page screenshot
