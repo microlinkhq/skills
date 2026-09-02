@@ -21,7 +21,7 @@ Free plan is 50 requests/day. Set `MICROLINK_API_KEY` for Pro: [microlink.io/#pr
 
 ## Client Config
 
-Same shape for Claude Desktop, Cursor (`.cursor/mcp.json`), VS Code, and Codex:
+Claude Desktop (`~/Library/Application Support/Claude/claude_desktop_config.json`) and Cursor (`.cursor/mcp.json`):
 
 ```json
 {
@@ -37,7 +37,21 @@ Same shape for Claude Desktop, Cursor (`.cursor/mcp.json`), VS Code, and Codex:
 }
 ```
 
-Claude Desktop path: `~/Library/Application Support/Claude/claude_desktop_config.json`.
+VS Code (`.vscode/mcp.json`) uses top-level `servers`:
+
+```json
+{
+  "servers": {
+    "microlink": {
+      "command": "npx",
+      "args": ["-y", "@microlink/mcp"],
+      "env": {
+        "MICROLINK_API_KEY": "YOUR_MICROLINK_API_KEY"
+      }
+    }
+  }
+}
+```
 
 Local checkout:
 
