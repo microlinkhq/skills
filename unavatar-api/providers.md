@@ -68,6 +68,12 @@ Resolves against **instagram.com**. No authentication or API tokens needed.
 
 e.g., `https://unavatar.io/instagram/willsmith`
 
+### Kick
+
+Resolves against **kick.com**.
+
+e.g., `https://unavatar.io/kick/xqc`
+
 ### Ko-fi
 
 Resolves against **ko-fi.com**.

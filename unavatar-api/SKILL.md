@@ -155,6 +155,7 @@ Providers are grouped by input type.
 | Google        |       |          |   ✓    |
 | Gravatar      |   ✓   |          |        |
 | Instagram     |       |    ✓     |        |
+| Kick          |       |    ✓     |        |
 | Ko-fi         |       |    ✓     |        |
 | LinkedIn      |       |    ✓     |        |
 | Mastodon      |       |    ✓     |        |
