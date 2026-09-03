@@ -1,8 +1,9 @@
 # Metadata extraction
 
 ```js
-const mql = require('@microlink/mql')
+import createClient from 'microlink.io'
 
-const { data } = await mql('https://example.com')
-console.log(data.title, data.description, data.image?.url)
+const microlink = createClient()
+const { title, description, image } = await microlink.metadata('https://example.com')
+console.log(title, description, image?.url)
 ```

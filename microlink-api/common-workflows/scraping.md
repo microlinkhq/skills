@@ -1,14 +1,13 @@
-# Custom scraping with `data`
+# Custom scraping
 
 ```js
-const mql = require('@microlink/mql')
+import createClient from 'microlink.io'
 
-const { data } = await mql('https://news.ycombinator.com', {
-  data: {
-    headline: { selector: '.titleline > a', attr: 'text' },
-    link: { selector: '.titleline > a', attr: 'href', type: 'url' }
-  }
+const microlink = createClient()
+const { headline, link } = await microlink.extract('https://news.ycombinator.com', {
+  headline: { selector: '.titleline > a', attr: 'text' },
+  link: { selector: '.titleline > a', attr: 'href', type: 'url' }
 })
 
-console.log(data.headline, data.link)
+console.log(headline, link)
 ```

@@ -7,17 +7,23 @@
 
 Always use `pnpm` as the package manager. Use when installing, adding, or removing dependencies, running scripts, or any npm/yarn/pnpm command. Replaces npm and yarn with pnpm equivalents.
 
-### microlink-google
+### microlink
 
-> `npx -y skills add microlinkhq/skills/microlink-google`
+> `npx -y skills add microlinkhq/skills/microlink`
 
-Query 10 Google verticals (search, news, images, videos, places, maps, shopping, scholar, patents, autocomplete) as structured data via `@microlink/google`. Use when users need to fetch Google search results programmatically, scrape Google SERP data, build search-powered features, retrieve Google News or Shopping data, get place/map coordinates, find academic papers, or work with any Google vertical through a unified Node.js API.
+Turn URLs into product results with `microlink.io` — metadata, markdown/html/text, screenshots, PDFs, logos, embeds, video/audio, page collections, Google search, remote JS functions, and the Microlink CLI. Use when the user mentions Microlink, microlink.io, taking screenshots, generating PDFs, extracting page content, or scraping without browser infrastructure.
+
+### microlink-mcp
+
+> `npx -y skills add microlinkhq/skills/microlink-mcp`
+
+Expose Microlink products to AI assistants via the `@microlink/mcp` stdio server. Use when the user mentions Microlink MCP, Claude Desktop/Cursor/VS Code MCP config, or wiring Microlink tools into an assistant.
 
 ### microlink-api
 
 > `npx -y skills add microlinkhq/skills/microlink-api`
 
-Interact with Microlink API and MQL for metadata extraction, screenshots, PDFs, web scraping, and browser automation. Use when the user mentions Microlink, MQL, @microlink/mql, web scraping with CSS selectors, taking website screenshots, generating PDFs from URLs, extracting metadata from links, or embedding link previews.
+Microlink HTTP API parameters, embed URLs, and query-string composition. Use when the user needs `api.microlink.io` query parameters or a direct asset URL via `embed`. Prefer the `microlink` skill for the `microlink.io` product client.
 
 ### unavatar-api
 

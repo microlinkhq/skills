@@ -1,14 +1,9 @@
 # Turn a whole page into markdown
 
 ```js
-const mql = require('@microlink/mql')
+import createClient from 'microlink.io'
 
-const { data } = await mql('https://example.com', {
-  data: {
-    content: { attr: 'markdown' }
-  },
-  meta: false
-})
-
-console.log(data.content)
+const microlink = createClient()
+const markdown = await microlink.markdown('https://example.com')
+console.log(markdown)
 ```

@@ -13,7 +13,7 @@ Use this file as the deep reference.
 - Must include protocol (`http://` or `https://`)
 - Must be publicly reachable
 - Must follow WHATWG URL standard
-- URLs with query params should be properly encoded (MQL handles this automatically)
+- URLs with query params should be properly encoded (`microlink.io` handles this automatically)
 - Protocol affects relative URL resolution inside the target page
 
 ## meta
@@ -222,7 +222,7 @@ Custom browser viewport: `width`, `height`, `deviceScaleFactor`, `isMobile`, `ha
 
 ## Compression
 
-Brotli (`br`) and gzip (`gz`) supported. Set `Accept-Encoding` header. MQL enables compression by default. Verify via `content-encoding` response header.
+Brotli (`br`) and gzip (`gz`) supported. Set `Accept-Encoding` header. `microlink.io` enables compression by default. Verify via `content-encoding` response header.
 
 ## Rate Limiting
 

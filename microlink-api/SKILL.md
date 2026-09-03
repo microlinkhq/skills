@@ -1,94 +1,54 @@
 ---
 name: microlink-api
-description: Use Microlink API/MQL to extract URL metadata, build link previews, capture screenshots/PDFs, scrape CSS-selected data, and avoid browser infrastructure.
+description: Microlink HTTP API parameters, embed URLs, and query-string composition via the microlink.io client. Use when the user needs api.microlink.io query parameters, a direct asset URL via embed, or the full parameter list. Prefer the microlink skill for product methods.
 ---
 
 # Microlink API
 
-Microlink turns a URL into structured output over HTTP. It can return metadata, media assets, scraped content, and browser-rendered results.
+HTTP API behind `microlink.io`. Use the [microlink](../microlink/SKILL.md) skill for product methods. This skill covers endpoints, query parameters, embed URLs, and `extract` rule patterns.
 
 ## Quick Start
 
-### 1) Pick endpoint
-
-- Free endpoint: `https://api.microlink.io` (no auth, 50 requests/day)
-- Pro endpoint: `https://pro.microlink.io` (requires `x-api-key` header)
-
-### 2) Build a minimal request
-
 ```js
-const mql = require('@microlink/mql')
-const { status, data, response } = await mql('https://example.com')
+import createClient from 'microlink.io'
+
+const microlink = createClient()
+const microlinkPro = createClient({ apiKey: process.env.MICROLINK_API_KEY })
+
+const { title, description } = await microlink.metadata('https://example.com')
 ```
 
-### 3) Add only needed options
+```bash
+npm install microlink.io
+```
 
-- Metadata only: default `meta: true`
-- Faster screenshot/PDF requests: set `meta: false`
-- Reduce payload: use `filter` (example: `'url,title,image.url'`)
+- Free: `https://api.microlink.io` — 50 requests/day, no key
+- Pro: `https://pro.microlink.io` — requires `apiKey` (`x-api-key`)
 
 ## When To Use What
 
-- Need parsed page metadata -> use default request.
-- Need image capture -> `screenshot: true`.
-- Need downloadable PDF -> `pdf: true`.
-- Need specific DOM values -> `data` rules with CSS selectors.
-- Need direct asset URL response (no JSON) -> `embed`.
-- Need JS-dependent pages -> `prerender: true` or keep `auto`.
-
-## Response Shape
-
-Microlink uses JSend-style responses:
-
-```json
-{
-  "status": "success",
-  "data": {},
-  "message": "optional",
-  "more": "optional docs url"
-}
-```
-
-- `status`: `success` (2xx), `fail` (4xx), `error` (5xx)
-- `data`: extracted output (`title`, `description`, `image`, `video`, and more)
+- Metadata → `microlink.metadata(url)`
+- Screenshot → `microlink.screenshot(url)`
+- PDF → `microlink.pdf(url)`
+- Specific DOM values → `microlink.extract(url, rules)`
+- Direct asset URL (no JSON) → `embed` query param
+- JS-heavy pages → `prerender: true` or keep `auto`
 
 ## Common Workflows
 
 For copy-paste recipes, see [common-workflows/README.md](common-workflows/README.md).
 
-## MQL Usage Notes
-
-### Install
-
-```bash
-npm install @microlink/mql
-```
-
-### Runtime imports
-
-- Node.js: `const mql = require('@microlink/mql')`
-- Edge/WinterCG: `import mql from '@microlink/mql/lightweight'`
-- Browser: `import mql from 'https://esm.sh/@microlink/mql'`
-
-### Signature
-
-`mql(url, [options], [httpOptions])`
-
-- `url`: required target URL
-- `options`: Microlink parameters plus `apiKey`, `cache`, `retry`
-- `httpOptions`: forwarded to the underlying HTTP client
-
-Extra methods: `mql.stream()`, `mql.buffer()`.
-
 ## Parameters At A Glance
+
+These are API query parameters. The product client routes well-known keys for you; everything else is forwarded as a top-level query param.
 
 ### Core
 
 - `url` (required): target URL with protocol
 - `meta` (default `true`): metadata extraction
-- `data`: custom scraping rules
+- `data`: custom scraping rules (`extract`)
 - `filter`: comma-separated output fields
-- `embed`: return one field directly as response body
+- `embed`: return one field directly as the response body
 
 ### Asset generation
 
@@ -115,38 +75,40 @@ Extra methods: `mql.stream()`, `mql.buffer()`.
 
 ## Scraping Patterns
 
+Pass rules to `microlink.extract(url, rules)`:
+
 ### Single value
 
 ```js
-data: {
+const { avatar } = await microlink.extract('https://example.com', {
   avatar: { selector: '#avatar', attr: 'src', type: 'image' }
-}
+})
 ```
 
 ### Collection
 
 ```js
-data: {
+const { stories } = await microlink.extract('https://news.ycombinator.com', {
   stories: { selectorAll: '.titleline > a', attr: 'text' }
-}
+})
 ```
 
 ### Fallback list
 
 ```js
-data: {
+const { title } = await microlink.extract('https://example.com', {
   title: [
     { selector: 'meta[property="og:title"]', attr: 'content' },
     { selector: 'title', attr: 'text' },
     { selector: 'h1', attr: 'text' }
   ]
-}
+})
 ```
 
 ### Nested object
 
 ```js
-data: {
+const { stats } = await microlink.extract('https://example.com', {
   stats: {
     selector: '.profile',
     attr: {
@@ -154,26 +116,40 @@ data: {
       stars: { selector: '.stars', type: 'number' }
     }
   }
-}
+})
 ```
 
 ### Evaluate JS in browser context
 
 ```js
-data: {
+const { version } = await microlink.extract('https://example.com', {
   version: { evaluate: 'window.next.version', type: 'string' }
-}
+})
 ```
+
+## Embed URLs
+
+Return one field as the response body (useful in `<img src>`):
+
+```html
+<img src="https://api.microlink.io/?url=https://example.com&screenshot=true&meta=false&embed=screenshot.url">
+```
+
+Useful paths: `screenshot.url`, `pdf.url`, `image.url`, `logo.url`, `video.url`.
 
 ## Error Handling
 
 ```js
-const { MicrolinkError } = mql
+import createClient, { MicrolinkError } from 'microlink.io'
+
+const microlink = createClient()
 
 try {
-  const { data } = await mql('https://example.com', { screenshot: true })
+  await microlink.screenshot('https://example.com')
 } catch (error) {
-  // error.status, error.code, error.message, error.statusCode
+  if (error instanceof MicrolinkError) {
+    // error.status, error.code, error.message, error.statusCode
+  }
 }
 ```
 
@@ -182,18 +158,18 @@ Common error codes: `EAUTH`, `ERATE`, `EINVALURL`, `EBRWSRTIMEOUT`, `EPRO`, `ETI
 ## Security And Reliability Rules
 
 - Never expose `x-api-key` in client-side code.
-- Use `pro.microlink.io` for authenticated requests.
+- Use `pro.microlink.io` for authenticated requests (set `apiKey` on the client).
 - For frontend usage, use a server proxy (`microlinkhq/proxy` or `microlinkhq/edge-proxy`).
-- If a request is heavy and metadata is not needed, set `meta: false`.
+- If a request is heavy and metadata is not needed, product methods already set `meta: false`.
 
 ## CLI
 
 ```bash
-npm install -g @microlink/cli
-microlink <url> [flags]
+npx microlink.io <url|product> [flags]
+npx microlink.io login
 ```
 
-Common flags: `--api-key`, `--pretty`, `--copy`, `--colors`.
+See [microlink](../microlink/SKILL.md) for every product as a subcommand.
 
 ## Deep Reference
 

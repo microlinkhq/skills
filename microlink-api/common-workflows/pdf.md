@@ -1,12 +1,13 @@
 # PDF generation
 
 ```js
-const mql = require('@microlink/mql')
+import createClient from 'microlink.io'
 
-const { data } = await mql('https://example.com', {
-  pdf: { format: 'A4', landscape: false },
-  meta: false
+const microlink = createClient()
+const { url } = await microlink.pdf('https://example.com', {
+  format: 'A4',
+  landscape: false
 })
 
-console.log(data.pdf.url)
+console.log(url)
 ```

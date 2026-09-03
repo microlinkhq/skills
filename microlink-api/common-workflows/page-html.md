@@ -1,14 +1,9 @@
 # Turn a whole page into HTML
 
 ```js
-const mql = require('@microlink/mql')
+import createClient from 'microlink.io'
 
-const { data } = await mql('https://example.com', {
-  data: {
-    content: { attr: 'html' }
-  },
-  meta: false
-})
-
-console.log(data.content)
+const microlink = createClient()
+const html = await microlink.html('https://example.com')
+console.log(html)
 ```

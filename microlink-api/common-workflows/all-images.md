@@ -1,14 +1,9 @@
 # Extract all images
 
 ```js
-const mql = require('@microlink/mql')
+import createClient from 'microlink.io'
 
-const { data } = await mql('https://example.com', {
-  data: {
-    images: { selectorAll: 'img[src]', attr: 'src', type: 'url' }
-  },
-  meta: false
-})
-
-console.log(data.images)
+const microlink = createClient()
+const images = await microlink.images('https://example.com')
+console.log(images)
 ```
