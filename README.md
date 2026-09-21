@@ -11,13 +11,13 @@ Always use `pnpm` as the package manager. Use when installing, adding, or removi
 
 > `npx -y skills add microlinkhq/skills/microlink`
 
-Turn URLs into product results with `microlink.io` — metadata, markdown/html/text, screenshots, PDFs, logos, embeds, video/audio, page collections, Google search, remote JS functions, and the Microlink CLI. Use when the user mentions Microlink, microlink.io, taking screenshots, generating PDFs, extracting page content, or scraping without browser infrastructure.
+Turn URLs into product results with `microlink.io` — metadata, markdown/html/text, screenshots, PDFs, logos, embeds, video/audio, page collections, Google search, remote JS functions, and the Microlink CLI. Installs `@microlink/mcp` when the assistant must execute a product in chat. Use when the user mentions Microlink, microlink.io, taking screenshots, generating PDFs, extracting page content, or scraping without browser infrastructure.
 
 ### microlink-mcp
 
 > `npx -y skills add microlinkhq/skills/microlink-mcp`
 
-Expose Microlink products to AI assistants via the `@microlink/mcp` stdio server — including product docs and checkout onboarding. Use when the user mentions Microlink MCP, Claude Desktop/Cursor/VS Code MCP config, or wiring Microlink tools into an assistant.
+MCP runtime sheet for the `microlink` skill (tool list, client config, checkout, errors). Prefer `microlinkhq/skills/microlink`; add this only when installing or debugging `@microlink/mcp`.
 
 ### microlink-api
 
