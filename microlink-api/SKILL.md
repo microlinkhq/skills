@@ -1,11 +1,11 @@
 ---
 name: microlink-api
-description: Microlink HTTP API parameters, embed URLs, and query-string composition via the microlink.io client. Use when the user needs api.microlink.io query parameters, a direct asset URL via embed, or the full parameter list. Prefer the microlink skill for product methods.
+description: Companion of the microlink skill — HTTP query parameters, embed URLs, and extract grammar. Not an entry point. The microlink skill opens this when those details are needed.
 ---
 
 # Microlink API
 
-HTTP API behind `microlink.io`. Use the [microlink](../microlink/SKILL.md) skill for product methods. This skill covers endpoints, query parameters, embed URLs, and `extract` rule patterns.
+HTTP API behind `microlink.io`. Opened from the [microlink](https://raw.githubusercontent.com/microlinkhq/skills/master/microlink/SKILL.md) skill — do not treat this as a user-facing install. Product methods live there; this file covers endpoints, query parameters, embed URLs, and `extract` rule patterns.
 
 ## Quick Start
 
@@ -36,7 +36,7 @@ npm install microlink.io
 
 ## Common Workflows
 
-For copy-paste recipes, see [common-workflows/README.md](common-workflows/README.md).
+For copy-paste recipes, see [common-workflows](https://raw.githubusercontent.com/microlinkhq/skills/master/microlink-api/common-workflows/README.md).
 
 ## Parameters At A Glance
 
@@ -173,8 +173,8 @@ npx microlink.io login
 npx microlink.io <product> docs
 ```
 
-See [microlink](../microlink/SKILL.md) for every product as a subcommand.
+See [microlink](https://raw.githubusercontent.com/microlinkhq/skills/master/microlink/SKILL.md) for every product as a subcommand.
 
 ## Deep Reference
 
-For complete parameter-by-parameter docs, full error matrix, and response headers, see [api-reference.md](api-reference.md).
+For complete parameter-by-parameter docs, full error matrix, and response headers, see [api-reference.md](https://raw.githubusercontent.com/microlinkhq/skills/master/microlink-api/api-reference.md).

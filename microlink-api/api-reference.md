@@ -2,8 +2,8 @@
 
 Use this file as the deep reference.
 
-- For quick task-oriented guidance, start in `SKILL.md`.
-- For practical examples, use `common-workflows/README.md`.
+- For quick task-oriented guidance, start in https://raw.githubusercontent.com/microlinkhq/skills/master/microlink-api/SKILL.md
+- For practical examples, use https://raw.githubusercontent.com/microlinkhq/skills/master/microlink-api/common-workflows/README.md
 - For exact parameter behavior, defaults, and edge cases, use this file.
 - Parameter names accept both `camelCase` and `snake_case`.
 

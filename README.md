@@ -11,19 +11,7 @@ Always use `pnpm` as the package manager. Use when installing, adding, or removi
 
 > `npx -y skills add microlinkhq/skills/microlink`
 
-Turn URLs into product results with `microlink.io` — metadata, markdown/html/text, screenshots, PDFs, logos, embeds, video/audio, page collections, Google search, remote JS functions, and the Microlink CLI. Installs `@microlink/mcp` when the assistant must execute a product in chat. Use when the user mentions Microlink, microlink.io, taking screenshots, generating PDFs, extracting page content, or scraping without browser infrastructure.
-
-### microlink-mcp
-
-> `npx -y skills add microlinkhq/skills/microlink-mcp`
-
-MCP runtime sheet for the `microlink` skill (tool list, client config, checkout, errors). Prefer `microlinkhq/skills/microlink`; add this only when installing or debugging `@microlink/mcp`.
-
-### microlink-api
-
-> `npx -y skills add microlinkhq/skills/microlink-api`
-
-Microlink HTTP API parameters, embed URLs, and query-string composition. Use when the user needs `api.microlink.io` query parameters or a direct asset URL via `embed`. Prefer the `microlink` skill for the `microlink.io` product client.
+Entry point for Microlink. Product methods, CLI, and routing into the HTTP API and MCP runtime. Add this skill only — it opens `microlink-api` and `microlink-mcp` when those details are needed, and installs `@microlink/mcp` when the assistant must execute a product in chat. Use when the user mentions Microlink, microlink.io, taking screenshots, generating PDFs, extracting page content, or scraping without browser infrastructure.
 
 ### unavatar-api
 
