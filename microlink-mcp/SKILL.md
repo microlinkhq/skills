@@ -72,7 +72,7 @@ Local checkout:
 
 ## Tools
 
-| Tool | Library method | Returns |
+| Tool | Source | Returns |
 | --- | --- | --- |
 | `microlink_docs` | `microlink <product> docs` | canonical product markdown |
 | `microlink_list_plans` | dashboard Checkout API | plans a new customer can buy |
