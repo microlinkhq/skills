@@ -17,7 +17,7 @@ Turn URLs into product results with `microlink.io` — metadata, markdown/html/t
 
 > `npx -y skills add microlinkhq/skills/microlink-mcp`
 
-Expose Microlink products to AI assistants via the `@microlink/mcp` stdio server. Use when the user mentions Microlink MCP, Claude Desktop/Cursor/VS Code MCP config, or wiring Microlink tools into an assistant.
+Expose Microlink products to AI assistants via the `@microlink/mcp` stdio server — including product docs and checkout onboarding. Use when the user mentions Microlink MCP, Claude Desktop/Cursor/VS Code MCP config, or wiring Microlink tools into an assistant.
 
 ### microlink-api
 
