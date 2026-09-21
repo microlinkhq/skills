@@ -1,11 +1,11 @@
 ---
 name: microlink-mcp
-description: Implementation detail of the microlink skill — @microlink/mcp tool list, client config, checkout onboarding, and error envelope. Prefer the microlink skill. Use this only when installing, debugging, or documenting the MCP runtime.
+description: Companion of the microlink skill — @microlink/mcp tool list, client config, checkout onboarding, and error envelope. Not an entry point. The microlink skill opens this when installing or debugging the MCP runtime.
 ---
 
 # @microlink/mcp
 
-Runtime for the [microlink](../microlink/SKILL.md) skill. Not a separate product — the microlink skill installs this when the assistant must execute a call. Product tools wrap `microlink.io` methods (same inputs, same direct result). `microlink_docs` loads canonical product markdown. Checkout tools buy a key without returning the secret.
+Runtime opened from the [microlink](../microlink/SKILL.md) skill. Not a separate product or install. The microlink skill installs this server when the assistant must execute a call. Product tools wrap `microlink.io` methods (same inputs, same direct result). `microlink_docs` loads canonical product markdown. Checkout tools buy a key without returning the secret.
 
 Requires Node.js 24+.
 

@@ -1,15 +1,20 @@
 ---
 name: microlink
-description: Turn URLs into product results with microlink.io — metadata, markdown/html/text, screenshots, PDFs, logos, embeds, video/audio, page collections, Google search, and remote JS functions. Use when the user mentions Microlink, microlink.io, taking screenshots, generating PDFs, extracting page content, scraping without browser infra, or the microlink CLI. Install @microlink/mcp when the assistant must execute a product in chat.
+description: Entry point for Microlink — product methods, CLI, and when to use the HTTP API or MCP runtime. Use when the user mentions Microlink, microlink.io, api.microlink.io, screenshots, PDFs, markdown, scraping, embed URLs, the microlink CLI, or wiring Microlink into an assistant. Opens microlink-api and microlink-mcp when those details are needed; installs @microlink/mcp when this session must execute a product.
 ---
 
 # microlink.io
 
-The Microlink API organized into products. Each method returns a **direct result**.
+The Microlink API organized into products. Each method returns a **direct result**. This skill is the entry point — do not send users to `microlink-api` or `microlink-mcp` as separate installs.
 
-`@microlink/mcp` is the assistant runtime for those same methods, not a separate product. Install it only when this session must execute a product (see [In the assistant](#in-the-assistant)).
+Need more than this file? Add the companion if it is not already on disk, then read it:
 
-For HTTP query-parameter details, see [microlink-api](../microlink-api/SKILL.md).
+| Need | Skill |
+| --- | --- |
+| HTTP query params, embed URLs, extract grammar | `npx -y skills add microlinkhq/skills/microlink-api` → [microlink-api](../microlink-api/SKILL.md) |
+| MCP tool list, checkout, error envelope | `npx -y skills add microlinkhq/skills/microlink-mcp` → [microlink-mcp](../microlink-mcp/SKILL.md) |
+
+`@microlink/mcp` is the assistant runtime for the same methods, not a separate product. Install the server when this session must execute a product (see [In the assistant](#in-the-assistant)).
 
 ## Quick Start
 
