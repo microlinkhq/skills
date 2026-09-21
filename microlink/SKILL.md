@@ -58,11 +58,11 @@ await microlink.screenshot('https://example.com', {
 | Tech stack | `technologies(url)` |
 | Lighthouse | `lighthouse(url)` |
 | Google as structured data | `search(query)` — requires `apiKey` |
-| Remote JavaScript | `run(url, code)` (alias `function`) |
+| Remote JavaScript | `function(url, code)` |
 
 ### metadata(url, options)
 
-Unified metadata object (`title`, `description`, `image`, `publisher`, …):
+Unified metadata object (`title`, `description`, `image`, `publisher`, …). Fields may be `null`.
 
 ```js
 const { title, description } = await microlink.metadata('https://vercel.com')
@@ -70,7 +70,7 @@ const { title, description } = await microlink.metadata('https://vercel.com')
 
 ### markdown / html / text
 
-Page content. Scope with `selector`:
+Page content (`string | null`). Scope with `selector`:
 
 ```js
 const markdown = await microlink.markdown('https://example.com', { selector: 'article' })
@@ -91,6 +91,8 @@ PDF keys: `format`, `margin`, `scale`, `landscape`, `pageRanges`, `width`, `heig
 
 ### logo(url, options)
 
+Returns an asset or `null`.
+
 ```js
 const { url } = await microlink.logo('https://github.com', { square: true })
 ```
@@ -105,7 +107,7 @@ const { html } = await microlink.embed('https://www.youtube.com/watch?v=dQw4w9Wg
 
 ### video / audio
 
-Primary playable source as an asset object:
+Primary playable source as an asset, or `null`:
 
 ```js
 const { url } = await microlink.video('https://vimeo.com/76979871')
@@ -122,7 +124,7 @@ const emails = await microlink.emails('https://microlink.io')
 
 ### extract(url, rules, options)
 
-Custom CSS rules, result unwrapped:
+Custom CSS rules, result unwrapped. Defaults to `meta: false`; pass `meta: true` to also return metadata.
 
 ```js
 const { image } = await microlink.extract('https://microlink.io', {
@@ -243,16 +245,18 @@ Vertical result fields (plus `html()` / `markdown()` when the result has a `url`
 - `patents`: `title`, `url`, `priority`/`filing`/`grant`/`publication` dates, `inventor`, `assignee`, `pdf?`
 - `autocomplete`: `value` only (no `url`)
 
-### run(url, code, options)
+### function(url, code, options)
 
-Run JavaScript in Microlink's sandbox. Alias: `function`. If the code does not reference `page`, no browser starts.
+Run JavaScript in Microlink's sandbox. If the code does not reference `page`, no browser starts.
 
-Prefer `extract` for simple DOM fields, and `styles`/`scripts`/`modules` for injection. Use `run` when you need to click, wait, compute, or `require()` a package.
+Args: `page` (Puppeteer `Page`, plus `metadata()` / `extract(rules)`), `response`, `headers`, `url`, and any extra options forwarded into scope.
+
+Prefer `extract` for simple DOM fields, and `styles`/`scripts`/`modules` for injection. Use `function` when you need to click, wait, compute, or `require()` a package.
 
 ```js
-const { value } = await microlink.run('https://example.com', () => 40 + 2)
+const { value } = await microlink.function('https://example.com', () => 40 + 2)
 
-const { value: title } = await microlink.run('https://example.com', async ({ page }) => {
+const { value: title } = await microlink.function('https://example.com', async ({ page }) => {
   await page.waitForSelector('h1')
   return page.$eval('h1', el => el.textContent)
 })
@@ -264,7 +268,7 @@ Prefer `page.title()`, `page.$eval()`, `page.waitForSelector()` over `page.evalu
 
 | | Free | Pro |
 | --- | --- | --- |
-| Timeout | 5s | up to 60s |
+| Timeout | 10s | up to 60s |
 | Memory | 16 MB | 32 MB |
 | Code size | 1024 bytes | unlimited |
 | Concurrency | 1 per IP | unlimited |
@@ -276,7 +280,7 @@ Resource errors: `TimeoutError`, `CpuTimeError`, `MemoryError`, `CodeSizeError`,
 Available on most URL products:
 
 - Browser: `prerender`, `waitUntil`, `waitForSelector`, `waitForTimeout`, `timeout`, `device`, `viewport`, `javascript`, `animations`, `adblock`, `mediaType`, `colorScheme`, `click`, `scroll`, `scripts`, `modules`, `styles`
-- Cache: `force`, `ttl`, `staleTtl` (Pro), `cacheKey`
+- Cache: `force`, `ttl` (Pro), `staleTtl` (Pro), `cacheKey` (Pro), `retry`
 - Pro: `headers`, `proxy`, `filename`
 
 If metadata is not needed, product methods already set `meta: false`.
@@ -316,10 +320,13 @@ Common codes: `EAUTH`, `ERATE`, `EINVALURL`, `EBRWSRTIMEOUT`, `EPRO`, `ETIMEOUT`
 
 ## CLI
 
-`npx microlink.io` works without a global install. `microlink login` saves an API key; `logout` clears it. A bare URL defaults to `metadata`.
+`npx microlink.io` works without a global install. `buy` purchases a key; `login` saves one; `logout` clears it. A bare URL defaults to `metadata`. `<product> docs` prints canonical parameter markdown.
 
 ```bash
+npx microlink.io buy
 npx microlink.io login
+npx microlink.io help screenshot
+npx microlink.io markdown docs
 npx microlink.io https://example.com
 npx microlink.io markdown https://example.com --selector article
 npx microlink.io screenshot https://example.com --fullPage
@@ -331,10 +338,10 @@ npx microlink.io extract https://microlink.io --data '{"image":{"selector":"meta
 npx microlink.io function https://example.com --file ./fn.js --selector h1
 ```
 
-Shared flags: `--api-key`, `--endpoint`, `--header` / `-H`, `--http.header.<name>`, `--trace`, `--trace-full`. `--trace` is not supported for `search` / `function` / `run`.
+Shared flags: `--api-key`, `--endpoint`, `--header` / `-H`, `--http.header.<name>`, `--trace`, `--trace-full`. `--trace` is not supported for `search` / `function`.
 
-On `429`, the CLI hints to run `microlink login`.
+On `429`, the CLI hints to run `microlink buy` or `microlink login`.
 
 ## MCP
 
-For AI assistants, use `@microlink/mcp` — see [microlink-mcp](../microlink-mcp/SKILL.md). Each tool mirrors a product method (`microlink_screenshot` → `screenshot()`, …).
+For AI assistants, use `@microlink/mcp` — see [microlink-mcp](../microlink-mcp/SKILL.md). Product tools mirror methods (`microlink_screenshot` → `screenshot()`, …). `microlink_docs` is the same markdown as `microlink <product> docs`.

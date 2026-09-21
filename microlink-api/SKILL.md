@@ -60,18 +60,20 @@ These are API query parameters. The product client routes well-known keys for yo
 
 - `prerender`: `auto`, `true`, or `false`
 - `waitUntil`, `waitForSelector`, `waitForTimeout`, `timeout`
-- `device`, `viewport`, `javascript`, `animations`, `mediaType`
+- `device`, `viewport`, `javascript`, `animations`, `mediaType`, `colorScheme`
 - `click`, `scroll`, `scripts`, `modules`, `styles`
 
 ### Caching and performance
 
 - `force`: bypass cache
+- `retry`: exponential backoff retries
 - `ttl` (Pro): cache lifetime
 - `staleTtl` (Pro): stale-while-revalidate strategy
+- `cacheKey` (Pro): custom cache key
 
 ### Pro-only
 
-- `headers`, `proxy`, `filename`, `ttl`, `staleTtl`
+- `headers`, `proxy`, `filename`, `ttl`, `staleTtl`, `cacheKey`
 
 ## Scraping Patterns
 
@@ -166,7 +168,9 @@ Common error codes: `EAUTH`, `ERATE`, `EINVALURL`, `EBRWSRTIMEOUT`, `EPRO`, `ETI
 
 ```bash
 npx microlink.io <url|product> [flags]
+npx microlink.io buy
 npx microlink.io login
+npx microlink.io <product> docs
 ```
 
 See [microlink](../microlink/SKILL.md) for every product as a subcommand.

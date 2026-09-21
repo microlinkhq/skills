@@ -1,13 +1,15 @@
 ---
 name: microlink-mcp
-description: Expose Microlink products to AI assistants via the @microlink/mcp stdio server — screenshots, PDFs, metadata, markdown, search, extract, and remote functions. Use when the user mentions Microlink MCP, Claude Desktop/Cursor/VS Code MCP config, or wiring Microlink tools into an assistant.
+description: Expose Microlink products to AI assistants via the @microlink/mcp stdio server — screenshots, PDFs, metadata, markdown, search, extract, remote functions, product docs, and checkout onboarding. Use when the user mentions Microlink MCP, Claude Desktop/Cursor/VS Code MCP config, or wiring Microlink tools into an assistant.
 ---
 
 # @microlink/mcp
 
-Stdio MCP server. Each tool is a thin wrapper over a `microlink.io` product method — same inputs, same direct result.
+Stdio MCP server. Product tools wrap `microlink.io` methods — same inputs, same direct result. `microlink_docs` loads canonical product markdown. Checkout tools buy a key without returning the secret.
 
 For the Node/CLI product client, see [microlink](../microlink/SKILL.md).
+
+Requires Node.js 24+.
 
 ## Install
 
@@ -37,12 +39,13 @@ Claude Desktop (`~/Library/Application Support/Claude/claude_desktop_config.json
 }
 ```
 
-VS Code (`.vscode/mcp.json`) uses top-level `servers`:
+VS Code (`.vscode/mcp.json`) uses top-level `servers` and `"type": "stdio"`:
 
 ```json
 {
   "servers": {
     "microlink": {
+      "type": "stdio",
       "command": "npx",
       "args": ["-y", "@microlink/mcp"],
       "env": {
@@ -71,13 +74,17 @@ Local checkout:
 
 | Tool | Library method | Returns |
 | --- | --- | --- |
+| `microlink_docs` | `microlink <product> docs` | canonical product markdown |
+| `microlink_list_plans` | dashboard Checkout API | plans a new customer can buy |
+| `microlink_create_checkout_session` | dashboard Checkout API | `{ checkoutUrl, sessionId, … }` |
+| `microlink_get_checkout_session` | dashboard Checkout API | `open` / `paid` / `ready` / `expired` |
 | `microlink_metadata` | `metadata(url)` | title, description, image, logo, … |
-| `microlink_logo` | `logo(url)` | logo asset; `square` prefers icon variant |
-| `microlink_markdown` / `_html` / `_text` | `markdown` / `html` / `text` | page content string |
+| `microlink_logo` | `logo(url)` | logo asset or `null`; `square` prefers icon variant |
+| `microlink_markdown` / `_html` / `_text` | `markdown` / `html` / `text` | page content string or `null` |
 | `microlink_screenshot` | `screenshot(url)` | asset (`url`, `type`, `width`, `height`, `size`) |
 | `microlink_pdf` | `pdf(url)` | PDF asset |
 | `microlink_embed` | `embed(url)` | `{ html, scripts }` |
-| `microlink_video` / `_audio` | `video` / `audio` | primary playable asset |
+| `microlink_video` / `_audio` | `video` / `audio` | primary playable asset or `null` |
 | `microlink_links` / `_images` / `_videos` / `_audios` / `_emails` | matching collections | `string[]` |
 | `microlink_technologies` | `technologies(url)` | Wappalyzer array |
 | `microlink_lighthouse` | `lighthouse(url)` | Lighthouse report |
@@ -85,11 +92,15 @@ Local checkout:
 | `microlink_function` | `function(url, code)` | `{ value, isFulfilled, profiling, logging }` |
 | `microlink_extract` | `extract(url, rules)` | custom CSS rules; can compose screenshot/pdf/insights |
 
-Shared request knobs (most tools): `device`, `viewport`, `colorScheme`, `click`, `scroll`, `scripts`, `modules`, `styles`, `waitUntil`, `waitForSelector`, `waitForTimeout`, `prerender`, `adblock`, `animations`, `javascript`, `mediaType`, `ttl`, `staleTtl`, `force`, `retry`, `timeout`, `headers`, `proxy`, `filename`, `filter`.
+Call `microlink_docs({ product })` before guessing nested options.
+
+Shared request knobs (most URL tools): `device`, `viewport`, `colorScheme`, `click`, `scroll`, `scripts`, `modules`, `styles`, `waitUntil`, `waitForSelector`, `waitForTimeout`, `prerender`, `adblock`, `animations`, `javascript`, `mediaType`, `ttl`, `staleTtl` (PRO), `cacheKey` (PRO), `force`, `retry`, `timeout`, `headers` (PRO), `proxy` (PRO), `filename` (PRO), `filter`.
 
 `screenshot` / `pdf` / `insights` accept `true` for defaults or an object; `{}` is treated as `true`.
 
 Booleans also accept `"true"` / `"false"`. Object params also accept JSON strings (MCP client compatibility).
+
+Product tools are `readOnlyHint: true` except `microlink_function` (runs caller code) and `microlink_create_checkout_session` (creates remote Checkout state).
 
 ### Example
 
@@ -104,9 +115,20 @@ Booleans also accept `"true"` / `"false"`. Object params also accept JSON string
 }
 ```
 
-`microlink_search` extras: `query` (required), `type` (`search`/`news`/`images`/`videos`/`places`/`maps`/`shopping`/`scholar`/`patents`/`autocomplete`), `limit`, `page`, `location`, `period`.
+`microlink_docs` extras: `product` (required) — `metadata`, `logo`, `markdown`, `html`, `text`, `video`, `audio`, `emails`, `links`, `images`, `videos`, `audios`, `extract`, `screenshot`, `pdf`, `embed`, `technologies`, `lighthouse`, `search`, `function`.
+
+`microlink_search` extras: `query` (required), `type` (`search`/`news`/`images`/`videos`/`places`/`maps`/`shopping`/`scholar`/`patents`/`autocomplete`), `limit`, `page`, `location`, `period`. Missing key → use checkout tools so the human can buy one.
 
 `microlink_function` extras: `code` (function source string, e.g. `"async ({ page }) => page.title()"`).
+
+### Onboarding (no API key)
+
+1. `microlink_list_plans` — pick a `planId`
+2. `microlink_create_checkout_session` — `email`, `planId`; optional `label`, `idempotencyKey`
+3. Give `checkoutUrl` to the human. Never open or complete it.
+4. Poll `microlink_get_checkout_session` with `sessionId` until `ready` or `expired`
+
+`ready` includes `keyId` (non-secret handle). The API key secret is never returned here (welcome email / dashboard).
 
 ## Response Shape
 
@@ -115,8 +137,12 @@ Success: library result under `structuredContent.data` (and pretty-printed JSON 
 - `microlink_markdown` → `{ data: "# Title\n..." }`
 - `microlink_screenshot` → `{ data: { url, type, width, height, size } }`
 - `microlink_links` → `{ data: ["https://...", ...] }`
+- `microlink_docs` → `{ data: "# markdown…" }`
+- Onboarding tools → dashboard Checkout payload under the same envelope
 
-Failure: MCP `isError` plus `{ error: { message, code?, status?, statusCode?, url?, more? } }`. A `429` includes a free-quota hint (50/day).
+Nullable fields can legitimately be absent (`logo`, `markdown` when the selector matches nothing).
+
+Failure: MCP `isError` plus `{ error: { message, code?, status?, statusCode?, url?, more?, details? } }`. Capability errors (`EPROXYNEEDED`, `EINTEGRATION`) also include `reason: "upgrade_required"`, `capability`, `upgrade`, and `hint`. A `429` includes `reason: "quota_exceeded"` and a free-quota hint (50/day). Read `hint`/`reason` instead of retrying blindly.
 
 Parameters labeled PRO in Microlink docs need a paid plan.
 

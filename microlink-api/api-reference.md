@@ -160,14 +160,15 @@ Response headers: `x-fetch-mode` (`'prerender'` or `'fetch'`), `x-fetch-time`.
 
 - Type: `<string>`
 
-Executes JavaScript with headless browser access. Receives: `{ page, html, response }` plus query params.
-- `page`: Puppeteer Page object
-- `html`: Target URL HTML markup
-- `response`: Puppeteer HTTPResponse
+Executes JavaScript. If the code does not reference `page`, no browser starts. Receives `{ page, response, headers, url }` plus extra query params forwarded into scope.
+- `url`: target URL (available without a browser)
+- `page`: Puppeteer Page (`metadata()`, `extract(rules)`, plus standard Page methods)
+- `response`: HTTP response from the implicit navigation (only when `page` is used)
+- `headers`: request headers used to fetch the target
 
 Compression: Prefix with `lz#`, `gz#`, or `br#` for compressed function bodies.
 
-Allowed NPM packages: `@aws-sdk/client-s3`, `@mozilla/readability`, `cheerio`, `extract-email-address`, `got`, `ioredis`, `jsdom`, `lodash`, `metascraper`, `p-reflect`, `p-retry`, `p-timeout`, `path`, `url`, `youtube-dl-exec`.
+`require()` any npm package (`require('cheerio@1.0.0')` to pin). Free timeout is 10s (Pro up to 60s).
 
 ## device
 
@@ -209,6 +210,7 @@ Custom browser viewport: `width`, `height`, `deviceScaleFactor`, `isMobile`, `ha
 
 - `ttl` (string/number, default `'24h'`): Cache lifetime (1m–31d). Aliases: `'min'` (1m), `'max'` (31d). **Pro only.**
 - `staleTtl` (string/number/boolean, default `false`): Stale-while-revalidate. Set `staleTtl=0` to always revalidate in background. **Pro only.**
+- `cacheKey` (string): Custom cache key. **Pro only.**
 - `force` (boolean, default `false`): Bypass cache entirely
 - `retry` (number, default `2`): Exponential backoff retries
 - `ping` (boolean/object, default `true`): Verify URL reachability. Disable per-type: `ping: { audio: false }`
@@ -216,9 +218,9 @@ Custom browser viewport: `width`, `height`, `deviceScaleFactor`, `isMobile`, `ha
 ## Pro-Only Parameters
 
 - `headers` (object): Custom HTTP headers for target URL. Use `x-api-header-*` prefix for sensitive headers (not exposed in URL)
-- `proxy` (string/object): Custom proxy or automatic proxy resolution. Reflected in `x-fetch-mode: prerender-proxy`
+- `proxy` (string/object): Custom proxy URL or `{ url }` / `{ location }` (country). Reflected in `x-fetch-mode: prerender-proxy`
 - `filename` (string): Custom filename for generated assets
-- `ttl`, `staleTtl`: Cache control
+- `ttl`, `staleTtl`, `cacheKey`: Cache control
 
 ## Compression
 
