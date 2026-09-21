@@ -7,12 +7,12 @@ description: Entry point for Microlink — product methods, CLI, and when to use
 
 The Microlink API organized into products. Each method returns a **direct result**. This skill is the entry point — do not send users to `microlink-api` or `microlink-mcp` as separate installs.
 
-Need more than this file? Add the companion if it is not already on disk, then read it:
+Need more than this file? Fetch the companion markdown (relative paths will not resolve when this file is fetched alone):
 
-| Need | Skill |
+| Need | Markdown |
 | --- | --- |
-| HTTP query params, embed URLs, extract grammar | `npx -y skills add microlinkhq/skills/microlink-api` → [microlink-api](../microlink-api/SKILL.md) |
-| MCP tool list, checkout, error envelope | `npx -y skills add microlinkhq/skills/microlink-mcp` → [microlink-mcp](../microlink-mcp/SKILL.md) |
+| HTTP query params, embed URLs, extract grammar | https://raw.githubusercontent.com/microlinkhq/skills/master/microlink-api/SKILL.md |
+| MCP tool list, checkout, error envelope | https://raw.githubusercontent.com/microlinkhq/skills/master/microlink-mcp/SKILL.md |
 
 `@microlink/mcp` is the assistant runtime for the same methods, not a separate product. Install the server when this session must execute a product (see [In the assistant](#in-the-assistant)).
 
@@ -376,4 +376,4 @@ If those tools are missing:
 
 Tool names are `microlink_<method>` (`screenshot` → `microlink_screenshot`). Call `microlink_docs({ product })` before guessing nested options. Don't shell out to `npx microlink.io` for one-shot chat work when MCP is available.
 
-Config, checkout onboarding, and error envelopes: [microlink-mcp](../microlink-mcp/SKILL.md).
+Config, checkout onboarding, and error envelopes: https://raw.githubusercontent.com/microlinkhq/skills/master/microlink-mcp/SKILL.md

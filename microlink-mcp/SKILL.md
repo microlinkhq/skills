@@ -5,7 +5,7 @@ description: Companion of the microlink skill — @microlink/mcp tool list, clie
 
 # @microlink/mcp
 
-Runtime opened from the [microlink](../microlink/SKILL.md) skill. Not a separate product or install. The microlink skill installs this server when the assistant must execute a call. Product tools wrap `microlink.io` methods (same inputs, same direct result). `microlink_docs` loads canonical product markdown. Checkout tools buy a key without returning the secret.
+Runtime opened from the [microlink](https://raw.githubusercontent.com/microlinkhq/skills/master/microlink/SKILL.md) skill. Not a separate product or install. The microlink skill installs this server when the assistant must execute a call. Product tools wrap `microlink.io` methods (same inputs, same direct result). `microlink_docs` loads canonical product markdown. Checkout tools buy a key without returning the secret.
 
 Requires Node.js 24+.
 
