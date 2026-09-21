@@ -1,11 +1,13 @@
 ---
 name: microlink
-description: Turn URLs into product results with microlink.io — metadata, markdown/html/text, screenshots, PDFs, logos, embeds, video/audio, page collections, Google search, and remote JS functions. Use when the user mentions Microlink, microlink.io, taking screenshots, generating PDFs, extracting page content, scraping without browser infra, or the microlink CLI/MCP.
+description: Turn URLs into product results with microlink.io — metadata, markdown/html/text, screenshots, PDFs, logos, embeds, video/audio, page collections, Google search, and remote JS functions. Use when the user mentions Microlink, microlink.io, taking screenshots, generating PDFs, extracting page content, scraping without browser infra, or the microlink CLI. Install @microlink/mcp when the assistant must execute a product in chat.
 ---
 
 # microlink.io
 
 The Microlink API organized into products. Each method returns a **direct result**.
+
+`@microlink/mcp` is the assistant runtime for those same methods, not a separate product. Install it only when this session must execute a product (see [In the assistant](#in-the-assistant)).
 
 For HTTP query-parameter details, see [microlink-api](../microlink-api/SKILL.md).
 
@@ -342,6 +344,31 @@ Shared flags: `--api-key`, `--endpoint`, `--header` / `-H`, `--http.header.<name
 
 On `429`, the CLI hints to run `microlink buy` or `microlink login`.
 
-## MCP
+## In the assistant
 
-For AI assistants, use `@microlink/mcp` — see [microlink-mcp](../microlink-mcp/SKILL.md). Product tools mirror methods (`microlink_screenshot` → `screenshot()`, …). `microlink_docs` is the same markdown as `microlink <product> docs`.
+MCP is how this session *runs* a product. Do not tell the user to pick "skill vs MCP".
+
+- **Ship code / CLI / HTTP** → methods in this skill. Skip MCP.
+- **Do it now** (screenshot this URL, markdown that page) → use Microlink MCP tools.
+
+If those tools are missing:
+
+1. Merge a `microlink` server into the client config. Don't wipe other servers.
+2. Cursor / Claude Desktop: `.cursor/mcp.json` or `~/Library/Application Support/Claude/claude_desktop_config.json` with `mcpServers`. VS Code: `.vscode/mcp.json` with `servers` and `"type": "stdio"`.
+3. Reload MCP if the client requires it, then call the tools.
+
+```json
+{
+  "mcpServers": {
+    "microlink": {
+      "command": "npx",
+      "args": ["-y", "@microlink/mcp"],
+      "env": { "MICROLINK_API_KEY": "YOUR_MICROLINK_API_KEY" }
+    }
+  }
+}
+```
+
+Tool names are `microlink_<method>` (`screenshot` → `microlink_screenshot`). Call `microlink_docs({ product })` before guessing nested options. Don't shell out to `npx microlink.io` for one-shot chat work when MCP is available.
+
+Config, checkout onboarding, and error envelopes: [microlink-mcp](../microlink-mcp/SKILL.md).
