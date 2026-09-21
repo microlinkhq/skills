@@ -1,13 +1,11 @@
 ---
 name: microlink-mcp
-description: Expose Microlink products to AI assistants via the @microlink/mcp stdio server — screenshots, PDFs, metadata, markdown, search, extract, remote functions, product docs, and checkout onboarding. Use when the user mentions Microlink MCP, Claude Desktop/Cursor/VS Code MCP config, or wiring Microlink tools into an assistant.
+description: Implementation detail of the microlink skill — @microlink/mcp tool list, client config, checkout onboarding, and error envelope. Prefer the microlink skill. Use this only when installing, debugging, or documenting the MCP runtime.
 ---
 
 # @microlink/mcp
 
-Stdio MCP server. Product tools wrap `microlink.io` methods — same inputs, same direct result. `microlink_docs` loads canonical product markdown. Checkout tools buy a key without returning the secret.
-
-For the Node/CLI product client, see [microlink](../microlink/SKILL.md).
+Runtime for the [microlink](../microlink/SKILL.md) skill. Not a separate product — the microlink skill installs this when the assistant must execute a call. Product tools wrap `microlink.io` methods (same inputs, same direct result). `microlink_docs` loads canonical product markdown. Checkout tools buy a key without returning the secret.
 
 Requires Node.js 24+.
 
