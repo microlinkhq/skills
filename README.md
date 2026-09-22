@@ -11,7 +11,7 @@ Always use `pnpm` as the package manager. Use when installing, adding, or removi
 
 > `npx -y skills add microlinkhq/skills/microlink`
 
-Entry point for Microlink. Product methods, CLI, and routing into the HTTP API and MCP runtime. Add this skill only — it opens `microlink-api` and `microlink-mcp` when those details are needed, and installs `@microlink/mcp` when the assistant must execute a product in chat. Use when the user mentions Microlink, microlink.io, taking screenshots, generating PDFs, extracting page content, or scraping without browser infrastructure.
+Complete Microlink product reference — return shapes, options, CLI, and when to run a method over HTTP or MCP. Use when the user mentions Microlink, microlink.io, api.microlink.io, screenshots, PDFs, markdown, scraping, embed URLs, the microlink CLI, or wiring Microlink into an assistant. This file is enough to call any product. Installs `@microlink/mcp` when this session must execute a product.
 
 ### unavatar-api
 

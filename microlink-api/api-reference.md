@@ -13,7 +13,7 @@ Use this file as the deep reference.
 - Must include protocol (`http://` or `https://`)
 - Must be publicly reachable
 - Must follow WHATWG URL standard
-- URLs with query params should be properly encoded (`microlink.io` handles this automatically)
+- If the target URL has its own query string, encode the `url` value so those parameters are not read as Microlink parameters
 - Protocol affects relative URL resolution inside the target page
 
 ## meta
@@ -25,9 +25,10 @@ Enable/disable normalized metadata detection. When `true` (default), extracts: `
 
 Configurable detection:
 
-- Include specific fields: `meta: { author: true, title: true }` (only those fields)
-- Exclude specific fields: `meta: { image: false, logo: false }` (all except those)
-- Disable entirely: `meta: false` (speeds up screenshot/video-only requests)
+- Include specific fields: `meta.author=true&meta.title=true` (only those fields)
+- Exclude specific fields: `meta.image=false&meta.logo=false` (all except those)
+- Square logo: `meta.logo.square=true`
+- Disable entirely: `meta=false` (speeds up screenshot/video-only requests)
 
 Reflected as `x-fetch-mode: skipped` in response headers when disabled.
 
@@ -37,20 +38,22 @@ Reflected as `x-fetch-mode: skipped` in response headers when disabled.
 
 Custom data extraction using CSS selectors. Each key defines a field name, value is a rule object:
 
-| Property    | Type   | Description                                                                                                                               |
-| ----------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| selector    | string | CSS selector (Document.querySelector)                                                                                                     |
-| selectorAll | string | CSS selector for collections (Document.querySelectorAll)                                                                                  |
-| attr        | string | Attribute to extract: any HTML attr, `'html'`, `'outerHTML'`, `'text'`, `'markdown'`, `'val'`                                             |
-| type        | string | Value type validation: `'auto'`, `'string'`, `'number'`, `'boolean'`, `'date'`, `'image'`, `'url'`, `'audio'`, `'video'`, `'email'`, etc. |
-| evaluate    | string | JavaScript to evaluate in browser context                                                                                                 |
+| Property    | Type                        | Description                                                                                                                                                                                          |
+| ----------- | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| selector    | string \| string[]          | CSS selector (`querySelector`). A list is `selector.0`, `selector.1`                                                                                                                                 |
+| selectorAll | string \| string[]          | CSS selector for collections (`querySelectorAll`). Same list form                                                                                                                                    |
+| attr        | string \| string[] \| object | HTML attribute, or `'html'`, `'outerHTML'`, `'text'`, `'markdown'`, `'val'`. A list reads several attributes. An object nests more rules                                                             |
+| type        | string                      | `'auto'`, `'string'`, `'number'`, `'boolean'`, `'date'`, `'url'`, `'image'`, `'audio'`, `'video'`, `'email'`, `'ip'`, `'lang'`, `'logo'`, `'object'`, `'regexp'`, `'author'`, `'description'`, `'publisher'`, `'title'` |
+| evaluate    | string                      | JavaScript to evaluate in browser context                                                                                                                                                            |
+
+`type=url` returns a URL string. `type=image`, `audio`, `video`, and `logo` return an asset (`url`, `type`, `size`, `size_pretty`, `width`, `height`).
 
 Supports:
 
 - **Fallback rules**: Pass array of rule objects; first truthy result wins
 - **Nested rules**: Use `attr` as object with sub-rules
 - **Collections**: Use `selectorAll` instead of `selector`
-- **Whole-page serialization**: Omit `selector`, use `attr: 'markdown'` for full-page markdown conversion
+- **Whole-page serialization**: Omit `selector` and set `attr` to `markdown`, `html`, or `text`. Name the field the same way: `data.markdown.attr=markdown`. Scope with `data.markdown.selector`
 
 ## screenshot
 
@@ -68,6 +71,10 @@ Sub-parameters:
 - `screenshot.overlay.browser` (string): `'light'` or `'dark'` browser chrome overlay
 - `screenshot.overlay.background` (string): Hex color, CSS gradient, or image URL
 - `screenshot.codeScheme` (string, default `'atom-dark'`): Syntax highlighting for JSON/HTML content. Accepts prism-themes identifier or remote CSS URL
+- `screenshot.optimizeForSpeed` (boolean): Faster encode, larger file
+- `screenshot.animated` (boolean): GIF/MP4 instead of a still
+- `screenshot.palette` (boolean): Dominant colors for this capture
+- `screenshot.quality` (number): JPEG quality
 
 ## pdf
 
@@ -85,6 +92,7 @@ Sub-parameters:
 - `pdf.pageRanges` (string): e.g., `'1-3'`
 - `pdf.width` (string): Override width
 - `pdf.height` (string): Override height
+- `pdf.printBackground` (boolean): Include CSS backgrounds
 
 ## embed
 
@@ -113,7 +121,7 @@ Detects browser-friendly audio source URL. Adds `data.audio` with `url`, `type`,
 - Type: `<boolean>` | `<object>`
 - Default: `false`
 
-Detects oEmbed content. Returns `data.iframe` with `html` and `scripts` subfields. Supports oEmbed consumer params like `maxWidth`, `maxHeight`.
+Detects oEmbed content. Returns `data.iframe` with `html` and `scripts`. Consumer limits are `iframe.maxWidth` and `iframe.maxHeight`.
 
 ## insights
 
@@ -125,7 +133,9 @@ Returns `data.insights` with:
 - `technologies`: Wappalyzer-powered tech stack detection
 - `lighthouse`: Full Lighthouse audit report
 
-Disable individually: `insights: { lighthouse: true, technologies: false }`
+Turn one on and the other off: `insights.lighthouse=true&insights.technologies=false`.
+
+Lighthouse keys (`insights.lighthouse.<key>`): `onlyCategories`, `onlyAudits`, `skipAudits`, `output`.
 
 ## palette
 
@@ -224,11 +234,24 @@ Custom browser viewport: `width`, `height`, `deviceScaleFactor`, `isMobile`, `ha
 
 ## Compression
 
-Brotli (`br`) and gzip (`gz`) supported. Set `Accept-Encoding` header. `microlink.io` enables compression by default. Verify via `content-encoding` response header.
+Brotli (`br`) and gzip are supported. Send `Accept-Encoding` and check `content-encoding` on the response.
 
 ## Rate Limiting
 
-Free: 50 reqs/day. Headers: `x-rate-limit-limit`, `x-rate-limit-remaining`, `x-rate-limit-reset`. No throttling — parallel requests allowed within quota. HTTP 429 when exceeded.
+Quota depends on the endpoint. See [Rate limit](https://microlink.io/docs/api/basics/rate-limit).
+
+- Free (unauthenticated): soft limit of 25 requests
+- Pro (authenticated): the plan on the API key, from 14,000 requests
+
+HTTP 429 (`ERATE`) when the quota is spent. Wait for reset, or upgrade. No throttling — parallel requests are allowed inside the quota.
+
+Free responses carry the current window:
+
+| Header                   | Description                                                                  |
+| ------------------------ | ---------------------------------------------------------------------------- |
+| `x-rate-limit-limit`     | Maximum requests permitted per minute                                        |
+| `x-rate-limit-remaining` | Requests remaining in the current window                                     |
+| `x-rate-limit-reset`     | When the current window resets, as UTC epoch seconds                         |
 
 ## Error Codes (Complete)
 
@@ -266,7 +289,7 @@ Free: 50 reqs/day. Headers: `x-rate-limit-limit`, `x-rate-limit-remaining`, `x-r
 | `x-fetch-time`           | Time spent fetching                                |
 | `x-response-time`        | Total response time                                |
 | `x-request-id`           | Unique request identifier                          |
-| `x-rate-limit-limit`     | Max requests per window                            |
-| `x-rate-limit-remaining` | Remaining requests                                 |
-| `x-rate-limit-reset`     | Reset time (UTC epoch seconds)                     |
+| `x-rate-limit-limit`     | Free plan. Maximum requests permitted per minute   |
+| `x-rate-limit-remaining` | Free plan. Requests remaining in the current window |
+| `x-rate-limit-reset`     | Free plan. Window reset, UTC epoch seconds         |
 | `cf-cache-status`        | CloudFlare edge cache status                       |

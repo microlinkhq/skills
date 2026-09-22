@@ -93,6 +93,10 @@ const checkSkill = name => {
     )
   }
 
+  // Companion skills are opened from an entry-point skill. They stay out of
+  // README so `npx skills add` is not offered for them.
+  if (fields.description?.startsWith('Not an entry point.')) return
+
   const readme = fs.readFileSync(README, 'utf8')
   if (!readme.includes(`### ${name}`)) {
     failures.push(`README.md has no \`### ${name}\` section`)

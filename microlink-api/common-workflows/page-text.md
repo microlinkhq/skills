@@ -1,9 +1,10 @@
 # Turn a whole page into text
 
-```js
-import createClient from 'microlink.io'
-
-const microlink = createClient()
-const text = await microlink.text('https://example.com')
-console.log(text)
+```bash
+curl -G "https://api.microlink.io" \
+  --data-urlencode "url=https://example.com" \
+  --data-urlencode "meta=false" \
+  --data-urlencode "data.text.attr=text"
 ```
+
+The string is `data.text`. Add `data.text.selector` to scope it.

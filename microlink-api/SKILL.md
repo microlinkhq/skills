@@ -1,180 +1,356 @@
 ---
 name: microlink-api
-description: Companion of the microlink skill — HTTP query parameters, embed URLs, and extract grammar. Not an entry point. The microlink skill opens this when those details are needed.
+description: Not an entry point. Product methods, options, and the raw HTTP query map live in the microlink skill. Open this only for extra curl recipes.
 ---
 
 # Microlink API
 
-HTTP API behind `microlink.io`. Opened from the [microlink](https://raw.githubusercontent.com/microlinkhq/skills/master/microlink/SKILL.md) skill — do not treat this as a user-facing install. Product methods live there; this file covers endpoints, query parameters, embed URLs, and `extract` rule patterns.
+HTTP API at `api.microlink.io`. Every call is a `GET` with query parameters. Any HTTP client can send it. Product methods and the CLI live in the [microlink](https://raw.githubusercontent.com/microlinkhq/skills/master/microlink/SKILL.md) skill.
 
-## Quick Start
+Parameter names accept `camelCase` and `snake_case`. Nested options use dots (`screenshot.fullPage`). Encode every value. `curl --data-urlencode` does that for the text after `=`.
 
-```js
-import createClient from 'microlink.io'
+## Endpoints
 
-const microlink = createClient()
-const microlinkPro = createClient({ apiKey: process.env.MICROLINK_API_KEY })
+- Free: `https://api.microlink.io` — no key, soft limit of 25 requests
+- Pro: `https://pro.microlink.io` — `x-api-key` request header, from 14,000 requests on the key's plan
 
-const { title, description } = await microlink.metadata('https://example.com')
+```bash
+curl -G "https://api.microlink.io" \
+  --data-urlencode "url=https://example.com"
 ```
 
 ```bash
-npm install microlink.io
+curl -G "https://pro.microlink.io" \
+  -H "x-api-key: $MICROLINK_API_KEY" \
+  --data-urlencode "url=https://example.com"
 ```
 
-- Free: `https://api.microlink.io` — 50 requests/day, no key
-- Pro: `https://pro.microlink.io` — requires `apiKey` (`x-api-key`)
+The key is a header. A key sent to `api.microlink.io` returns `EPRO`. Confirm the plan with `x-pricing-plan` (`free` or `pro`).
+
+Forward a header to the target by prefixing `x-api-header-`. The API strips the prefix. This keeps cookies and auth out of the query string:
+
+```bash
+curl -G "https://pro.microlink.io" \
+  -H "x-api-key: $MICROLINK_API_KEY" \
+  -H "x-api-header-cookie: auth_token=..." \
+  --data-urlencode "url=https://example.com"
+```
+
+That arrives at the target as `cookie`.
+
+## Response
+
+JSON, JSend-shaped. Read fields from `data`. A fetched page also includes the target `statusCode`, `headers`, and `redirects`.
+
+```json
+{
+  "status": "success",
+  "data": {
+    "title": "Example Domain",
+    "description": "...",
+    "image": { "url": "..." },
+    "logo": { "url": "..." },
+    "url": "https://example.com/"
+  }
+}
+```
+
+`status` is `success` (2xx), `fail` (4xx), or `error` (5xx). `embed` replaces this JSON with the chosen field as the body.
 
 ## When To Use What
 
-- Metadata → `microlink.metadata(url)`
-- Screenshot → `microlink.screenshot(url)`
-- PDF → `microlink.pdf(url)`
-- Specific DOM values → `microlink.extract(url, rules)`
-- Direct asset URL (no JSON) → `embed` query param
-- JS-heavy pages → `prerender: true` or keep `auto`
+| Need | Query | Read |
+| --- | --- | --- |
+| Metadata | `url` (`meta` defaults to `true`) | `data.title`, `description`, `author`, `publisher`, `date`, `lang`, `url`, `image`, `logo` — each may be `null` |
+| One metadata field | `filter=title,description,image.url` | those fields only |
+| Logo | included in metadata; `meta.logo.square=true` for the icon | `data.logo` (asset or `null`) |
+| Screenshot | `screenshot=true` | `data.screenshot` |
+| PDF | `pdf=true` | `data.pdf` |
+| Video / audio source | `video=true` / `audio=true` | `data.video` / `data.audio` (asset or `null`) |
+| oEmbed player | `iframe=true` | `data.iframe` (`html`, `scripts`) |
+| Tech stack | `insights.technologies=true` and `insights.lighthouse=false` | `data.insights.technologies` |
+| Lighthouse | `insights.lighthouse=true` and `insights.technologies=false` | `data.insights.lighthouse` |
+| Page as markdown, HTML, or text | `data.markdown.attr=markdown` (same for `html`, `text`) | `data.markdown` (string or `null`) |
+| Links, images, videos, audios, emails | `data` rules below | `string[]` |
+| Custom DOM fields | `data.<field>.*` | `data.<field>` |
+| One field as the body | `embed=screenshot.url` | raw body |
+| Run JavaScript | `function=<expression>` | `data.function` |
+| JS-heavy page | `prerender=true` (default `auto`) | `x-fetch-mode` |
 
-## Common Workflows
+An asset is `{ url, type, size, size_pretty, width, height }`. Set `meta=false` when the response only needs an asset or `data` fields.
 
-For copy-paste recipes, see [common-workflows](https://raw.githubusercontent.com/microlinkhq/skills/master/microlink-api/common-workflows/README.md).
+Copy-paste requests: [common-workflows](https://raw.githubusercontent.com/microlinkhq/skills/master/microlink-api/common-workflows/README.md).
 
 ## Parameters At A Glance
 
-These are API query parameters. The product client routes well-known keys for you; everything else is forwarded as a top-level query param.
-
 ### Core
 
-- `url` (required): target URL with protocol
-- `meta` (default `true`): metadata extraction
-- `data`: custom scraping rules (`extract`)
-- `filter`: comma-separated output fields
-- `embed`: return one field directly as the response body
+- `url` (required): target URL with protocol. Encode it when it has its own query string.
+- `meta` (default `true`): normalized metadata. `meta.author=true` keeps only those fields. `meta.image=false` drops those fields. `meta.logo.square=true` asks for the square logo. `meta=false` skips detection (`x-fetch-mode: skipped`).
+- `data`: custom extraction rules
+- `filter`: comma-separated fields, dot notation allowed (`url,title,image.url`)
+- `embed`: return one field as the body
 
 ### Asset generation
 
-- `screenshot` / `screenshot.*`: create page image
-- `pdf` / `pdf.*`: create PDF
-- `video`, `audio`: detect playable sources
+- `screenshot` / `screenshot.*`: page image under `data.screenshot` (`url`, `type`, `width`, `height`, `size`, `size_pretty`)
+- `pdf` / `pdf.*`: PDF under `data.pdf`
+- `video`, `audio`: playable source under `data.video` / `data.audio`
+- `iframe`: oEmbed under `data.iframe`. Limits: `iframe.maxWidth`, `iframe.maxHeight`.
+- `insights.technologies`, `insights.lighthouse`: turn one on and the other off. Lighthouse keys: `onlyCategories`, `onlyAudits`, `skipAudits`, `output` (`insights.lighthouse.onlyCategories`).
+- `palette`: per-image colors
+
+Screenshot keys (`screenshot.<key>`): `fullPage`, `type` (`png`/`jpeg`), `overlay`, `element`, `omitBackground`, `optimizeForSpeed`, `codeScheme`, `animated`, `palette`, `quality`.
+
+PDF keys (`pdf.<key>`): `format`, `margin`, `scale`, `landscape`, `pageRanges`, `width`, `height`, `printBackground`. Default `mediaType` becomes `print`.
 
 ### Browser behavior
 
-- `prerender`: `auto`, `true`, or `false`
+- `prerender`: `auto` (default), `true`, or `false`. Response: `x-fetch-mode`, `x-fetch-time`.
 - `waitUntil`, `waitForSelector`, `waitForTimeout`, `timeout`
-- `device`, `viewport`, `javascript`, `animations`, `mediaType`, `colorScheme`
+- `device`, `viewport`, `javascript`, `animations`, `adblock`, `mediaType` (`screen`/`print`), `colorScheme` (`light`/`dark`/`no-preference`)
 - `click`, `scroll`, `scripts`, `modules`, `styles`
 
-### Caching and performance
+### Caching
 
 - `force`: bypass cache
-- `retry`: exponential backoff retries
-- `ttl` (Pro): cache lifetime
-- `staleTtl` (Pro): stale-while-revalidate strategy
-- `cacheKey` (Pro): custom cache key
+- `retry`: exponential backoff retries (default `2`)
+- `ttl`, `staleTtl`, `cacheKey`: Pro cache control
 
 ### Pro-only
 
-- `headers`, `proxy`, `filename`, `ttl`, `staleTtl`, `cacheKey`
+`headers`, `proxy`, `filename`, `ttl`, `staleTtl`, `cacheKey`. Prefer `x-api-header-*` request headers over a `headers` query object for secrets. `proxy` is a URL, `proxy.url`, or `proxy.location` (country).
 
-## Scraping Patterns
+```bash
+curl -G "https://api.microlink.io" \
+  --data-urlencode "url=https://example.com" \
+  --data-urlencode "screenshot=true" \
+  --data-urlencode "screenshot.fullPage=true" \
+  --data-urlencode "screenshot.type=png" \
+  --data-urlencode "meta=false"
+```
 
-Pass rules to `microlink.extract(url, rules)`:
+The image URL is `data.screenshot.url`.
+
+## data Rules
+
+Each `data.<field>` key is a field on `data`. Rule properties:
+
+| Property | Meaning |
+| --- | --- |
+| `selector` | `querySelector`. One selector, or several via `selector.0`, `selector.1` |
+| `selectorAll` | `querySelectorAll` — result is an array. Same list form as `selector` |
+| `attr` | HTML attribute, or `html`, `outerHTML`, `text`, `markdown`, `val`. A list reads several attributes. An object nests more rules. |
+| `type` | `auto`, `string`, `number`, `boolean`, `date`, `url`, `image`, `audio`, `video`, `email`, `ip`, `lang`, `logo`, `object`, `regexp`, `author`, `description`, `publisher`, `title` |
+| `evaluate` | JavaScript expression in the page |
+
+`type=url` returns a URL string. `type=image`, `audio`, `video`, and `logo` return an asset.
 
 ### Single value
 
-```js
-const { avatar } = await microlink.extract('https://example.com', {
-  avatar: { selector: '#avatar', attr: 'src', type: 'image' }
-})
+```bash
+curl -G "https://api.microlink.io" \
+  --data-urlencode "url=https://example.com" \
+  --data-urlencode "meta=false" \
+  --data-urlencode "data.avatar.selector=#avatar" \
+  --data-urlencode "data.avatar.attr=src" \
+  --data-urlencode "data.avatar.type=image"
 ```
 
 ### Collection
 
-```js
-const { stories } = await microlink.extract('https://news.ycombinator.com', {
-  stories: { selectorAll: '.titleline > a', attr: 'text' }
-})
+```bash
+curl -G "https://api.microlink.io" \
+  --data-urlencode "url=https://news.ycombinator.com" \
+  --data-urlencode "meta=false" \
+  --data-urlencode "data.stories.selectorAll=.titleline > a" \
+  --data-urlencode "data.stories.attr=text"
+```
+
+Canonical collections. Override `selector` / `selectorAll` to scope them (`nav a`, `article img`).
+
+| Field | Rule |
+| --- | --- |
+| `links` | `selectorAll=a`, `attr=href`, `type=url` |
+| `images` | `selectorAll=img`, `attr=src`, `type=url` |
+| `videos` | `selectorAll.0=video[src]`, `selectorAll.1=video source[src]`, `attr=src`, `type=url` |
+| `audios` | `selectorAll.0=audio[src]`, `selectorAll.1=audio source[src]`, `attr=src`, `type=url` |
+| `emails` | `selector=html`, `attr=html`, `type=email` |
+
+### Whole page
+
+Omit `selector`. `attr` is `markdown`, `html`, or `text`, and the field name matches it. The string is `data.markdown` (or `data.html`, `data.text`). Add `data.markdown.selector` to scope it.
+
+```bash
+curl -G "https://api.microlink.io" \
+  --data-urlencode "url=https://example.com" \
+  --data-urlencode "meta=false" \
+  --data-urlencode "data.markdown.attr=markdown"
 ```
 
 ### Fallback list
 
-```js
-const { title } = await microlink.extract('https://example.com', {
-  title: [
-    { selector: 'meta[property="og:title"]', attr: 'content' },
-    { selector: 'title', attr: 'text' },
-    { selector: 'h1', attr: 'text' }
-  ]
-})
+First truthy rule wins. Number the rules with dots (`0`, `1`, `2`):
+
+```bash
+curl -G "https://api.microlink.io" \
+  --data-urlencode "url=https://example.com" \
+  --data-urlencode "meta=false" \
+  --data-urlencode "data.title.0.selector=h1" \
+  --data-urlencode "data.title.0.attr=text" \
+  --data-urlencode "data.title.1.selector=title" \
+  --data-urlencode "data.title.1.attr=text"
+```
+
+A JSON array on that one field is the same rule:
+
+```bash
+--data-urlencode 'data.title=[{"selector":"h1","attr":"text"},{"selector":"title","attr":"text"}]'
 ```
 
 ### Nested object
 
-```js
-const { stats } = await microlink.extract('https://example.com', {
-  stats: {
-    selector: '.profile',
-    attr: {
-      followers: { selector: '.followers', type: 'number' },
-      stars: { selector: '.stars', type: 'number' }
-    }
-  }
-})
+```bash
+curl -G "https://api.microlink.io" \
+  --data-urlencode "url=https://example.com" \
+  --data-urlencode "meta=false" \
+  --data-urlencode "data.stats.selector=.profile" \
+  --data-urlencode "data.stats.attr.followers.selector=.followers" \
+  --data-urlencode "data.stats.attr.followers.type=number" \
+  --data-urlencode "data.stats.attr.stars.selector=.stars" \
+  --data-urlencode "data.stats.attr.stars.type=number"
 ```
 
-### Evaluate JS in browser context
+### Evaluate
 
-```js
-const { version } = await microlink.extract('https://example.com', {
-  version: { evaluate: 'window.next.version', type: 'string' }
-})
+```bash
+curl -G "https://api.microlink.io" \
+  --data-urlencode "url=https://example.com" \
+  --data-urlencode "meta=false" \
+  --data-urlencode "data.version.evaluate=window.next.version" \
+  --data-urlencode "data.version.type=string"
 ```
+
+## function
+
+`function` is a JavaScript expression. The result is `data.function`: `isFulfilled`, `value`, `profiling`, `logging`. The function receives `page`, `response`, `headers`, and `url`, plus any extra query parameter. `page.metadata()` returns the metadata object. `page.extract(rules)` runs the same `data` rules inside the page. Code that never mentions `page` does not start a browser. `require()` loads an npm package (`require('cheerio@1.0.0')` pins it).
+
+```bash
+curl -G "https://api.microlink.io" \
+  --data-urlencode "url=https://example.com" \
+  --data-urlencode "meta=false" \
+  --data-urlencode 'function=() => 40 + 2'
+```
+
+```bash
+curl -G "https://api.microlink.io" \
+  --data-urlencode "url=https://example.com" \
+  --data-urlencode "meta=false" \
+  --data-urlencode 'function=async ({ page }) => page.$eval("h1", el => el.textContent)'
+```
+
+Prefix the code with `lz#`, `gz#`, or `br#` when the source is compressed. Thrown code still returns JSON: `isFulfilled` is `false` and `value` is `{ name, message }`.
+
+| | Free | Pro |
+| --- | --- | --- |
+| Timeout | 15s | 60s |
+| Memory | 64 MB | 128 MB |
+| Code size | 1024 bytes | unlimited |
+| Concurrency | 1 per IP | unlimited |
+| Outgoing requests | same origin only | unrestricted |
+
+Resource errors: `TimeoutError`, `CpuTimeError`, `MemoryError`, `CodeSizeError`, `ConcurrencyError`, `OutgoingRequestError`. Function errors: `EINVALFUNCTION` (syntax), `EINVALEVAL` (runtime).
 
 ## Embed URLs
 
-Return one field as the response body (useful in `<img src>`):
+`embed` returns one field as the body, with that asset's content type. The request URL is the asset. Use it in `<img>`, CSS, or Markdown.
 
 ```html
 <img src="https://api.microlink.io/?url=https://example.com&screenshot=true&meta=false&embed=screenshot.url">
 ```
 
-Useful paths: `screenshot.url`, `pdf.url`, `image.url`, `logo.url`, `video.url`.
+Paths: `screenshot.url`, `pdf.url`, `image.url`, `logo.url`, `video.url`.
 
-## Error Handling
+## Errors
 
-```js
-import createClient, { MicrolinkError } from 'microlink.io'
+`fail` / `error` bodies include `code`, `message`, `more`, and `report`. Field details sit on `data`. The request id is the `x-request-id` response header.
 
-const microlink = createClient()
-
-try {
-  await microlink.screenshot('https://example.com')
-} catch (error) {
-  if (error instanceof MicrolinkError) {
-    // error.status, error.code, error.message, error.statusCode
-  }
+```json
+{
+  "status": "fail",
+  "code": "EINVALURL",
+  "message": "The request has been not processed. See the errors above to know why.",
+  "data": { "url": "The URL `not-a-url` is not valid. Ensure it has protocol, hostname and is reachable." },
+  "more": "https://microlink.io/einvalurl"
 }
 ```
 
-Common error codes: `EAUTH`, `ERATE`, `EINVALURL`, `EBRWSRTIMEOUT`, `EPRO`, `ETIMEOUT`.
+Common codes: `EAUTH`, `ERATE`, `EINVALURL`, `EBRWSRTIMEOUT`, `EPRO`, `ETIMEOUT`.
 
-## Security And Reliability Rules
+## Rate Limit
 
-- Never expose `x-api-key` in client-side code.
-- Use `pro.microlink.io` for authenticated requests (set `apiKey` on the client).
-- For frontend usage, use a server proxy (`microlinkhq/proxy` or `microlinkhq/edge-proxy`).
-- If a request is heavy and metadata is not needed, product methods already set `meta: false`.
+Quota follows the endpoint ([rate limit](https://microlink.io/docs/api/basics/rate-limit)). Free is a soft limit of 25 requests. Pro starts at 14,000 on the API key's plan. HTTP 429 (`ERATE`) means the quota is spent — wait for reset, or upgrade. Parallel requests are allowed inside the quota.
 
-## CLI
+Free responses include the current window:
+
+| Header | Meaning |
+| --- | --- |
+| `x-rate-limit-limit` | Maximum requests permitted per minute |
+| `x-rate-limit-remaining` | Requests left in the current window |
+| `x-rate-limit-reset` | Window reset, UTC epoch seconds |
+
+## Buy an API key
+
+Start here when the free endpoint returns `ERATE` (HTTP 429), or when a call needs Pro (`EPRO`, `EHEADERS`, `EPROXY`, `ETTL`, `ESTTL`, `EFILENAME`). Checkout is `https://dashboard.microlink.io`. The secret is emailed. It is never in these responses. `keyId` is only a handle.
+
+1. List plans. `limit` is the monthly request quota. `price` is minor units (`3900` + `eur` is €39.00).
 
 ```bash
-npx microlink.io <url|product> [flags]
-npx microlink.io buy
-npx microlink.io login
-npx microlink.io <product> docs
+curl "https://dashboard.microlink.io/api/v1/plans"
 ```
 
-See [microlink](https://raw.githubusercontent.com/microlinkhq/skills/master/microlink/SKILL.md) for every product as a subcommand.
+```json
+{
+  "plans": [
+    { "id": "kz3osw", "limit": 45500, "price": 3900, "currency": "eur" }
+  ]
+}
+```
+
+2. Create a Checkout session with a plan `id`. `label` names the key (default `default`). Send a fresh `idempotency-key` (UUID, max 255 characters) and reuse that same header if this purchase is retried, so the 24-hour window does not open a second session.
+
+```bash
+curl -X POST "https://dashboard.microlink.io/api/v1/checkout/sessions" \
+  -H "content-type: application/json" \
+  -H "idempotency-key: $IDEMPOTENCY_KEY" \
+  -d '{"email":"you@example.com","planId":"kz3osw","label":"default"}'
+```
+
+The JSON includes `checkoutUrl` and `sessionId`. An unknown `planId` is HTTP 400. An email that already has a subscription adds a key and can still return `checkoutUrl` when that extra key needs payment.
+
+3. Give `checkoutUrl` to the human. They complete payment. Do not open the URL or pay on their behalf.
+
+4. Poll the session until `state` is `ready`. Stop on `expired`. An unknown `sessionId` is HTTP 404.
+
+```bash
+curl "https://dashboard.microlink.io/api/v1/checkout/sessions/$SESSION_ID"
+```
+
+| `state` | Meaning |
+| --- | --- |
+| `open` | Waiting for payment |
+| `paid` | Payment succeeded; the key is still being linked |
+| `ready` | Provisioned. Includes `keyId` |
+| `expired` | Session ended. Create a new one |
+
+5. The human copies the secret from the welcome email or the dashboard and sends it as `x-api-key` to `https://pro.microlink.io`. `x-pricing-plan: pro` confirms it.
+
+## Security
+
+- Keep `x-api-key` on the server. A browser page that sends the key publishes it.
+- For a website, proxy through `microlinkhq/proxy` or `microlinkhq/edge-proxy` and allow only trusted origins.
+- Put target secrets in `x-api-header-*` request headers.
 
 ## Deep Reference
 
-For complete parameter-by-parameter docs, full error matrix, and response headers, see [api-reference.md](https://raw.githubusercontent.com/microlinkhq/skills/master/microlink-api/api-reference.md).
+Parameter defaults, the full error matrix, and response headers: [api-reference.md](https://raw.githubusercontent.com/microlinkhq/skills/master/microlink-api/api-reference.md).

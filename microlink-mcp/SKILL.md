@@ -1,6 +1,6 @@
 ---
 name: microlink-mcp
-description: Companion of the microlink skill — @microlink/mcp tool list, client config, checkout onboarding, and error envelope. Not an entry point. The microlink skill opens this when installing or debugging the MCP runtime.
+description: Not an entry point. Product tools, arguments, checkout, and the error envelope are in the microlink skill. Open this only when debugging the @microlink/mcp server itself.
 ---
 
 # @microlink/mcp
