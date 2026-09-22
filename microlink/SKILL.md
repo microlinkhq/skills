@@ -1,18 +1,11 @@
 ---
 name: microlink
-description: Entry point for Microlink — product methods, CLI, and when to use the HTTP API or MCP runtime. Use when the user mentions Microlink, microlink.io, api.microlink.io, screenshots, PDFs, markdown, scraping, embed URLs, the microlink CLI, or wiring Microlink into an assistant. Opens microlink-api and microlink-mcp when those details are needed; installs @microlink/mcp when this session must execute a product.
+description: Complete Microlink product reference — return shapes, options, CLI, and when to run a method over HTTP or MCP. Use when the user mentions Microlink, microlink.io, api.microlink.io, screenshots, PDFs, markdown, scraping, embed URLs, the microlink CLI, or wiring Microlink into an assistant. This file is enough to call any product. Installs @microlink/mcp when this session must execute a product.
 ---
 
 # microlink.io
 
-The Microlink API organized into products. Each method returns a **direct result**. This skill is the entry point — do not send users to `microlink-api` or `microlink-mcp` as separate installs.
-
-Need more than this file? Fetch the companion markdown (relative paths will not resolve when this file is fetched alone):
-
-| Need | Markdown |
-| --- | --- |
-| HTTP query params, embed URLs, extract grammar | https://raw.githubusercontent.com/microlinkhq/skills/master/microlink-api/SKILL.md |
-| MCP tool list, checkout, error envelope | https://raw.githubusercontent.com/microlinkhq/skills/master/microlink-mcp/SKILL.md |
+The Microlink API organized into products. Each method returns a **direct result**. This file is the full reference for every product: what it returns, which options it takes, and the shared browser parameters. Do not fetch another skill or call `microlink_docs` to learn a product.
 
 `@microlink/mcp` is the assistant runtime for the same methods, not a separate product. Install the server when this session must execute a product (see [In the assistant](#in-the-assistant)).
 
@@ -51,11 +44,13 @@ await microlink.screenshot('https://example.com', {
 
 ## Products
 
+An **asset** is `{ url, type, width, height, size, size_pretty }`. Playable assets add `duration` (seconds) and `duration_pretty`. `palette: true` adds `palette` (hex, dominant first), `background_color`, `color`, and `alternative_color` to image assets. A missing field is `null`.
+
 | Need | Method |
 | --- | --- |
 | Link preview / metadata | `metadata(url)` |
 | Markdown / HTML / text | `markdown` / `html` / `text` |
-| Screenshot | `screenshot(url)` — `{ animated: true }` for GIF/MP4 |
+| Screenshot | `screenshot(url)` — `{ animated: true }` for a short video |
 | PDF | `pdf(url)` |
 | Brand logo | `logo(url)` |
 | oEmbed iframe | `embed(url)` |
@@ -65,232 +60,387 @@ await microlink.screenshot('https://example.com', {
 | Tech stack | `technologies(url)` |
 | Lighthouse | `lighthouse(url)` |
 | Google as structured data | `search(query)` — requires `apiKey` |
-| Remote JavaScript | `function(url, code)` |
+| Remote JavaScript | `function(url, code)` (`run` is an alias) |
 
 ### metadata(url, options)
 
-Unified metadata object (`title`, `description`, `image`, `publisher`, …). Fields may be `null`.
+Normalized fields from Open Graph, Twitter Cards, JSON-LD, and HTML:
+
+`title`, `description`, `lang` (ISO 639-1), `author`, `publisher`, `date` (ISO 8601), `url`, `image` (asset), `logo` (asset). `video` and `audio` are off unless you pass `{ video: true }` or `{ audio: true }`, which adds that playable asset on the same object.
 
 ```js
-const { title, description } = await microlink.metadata('https://vercel.com')
+const { title, description, image } = await microlink.metadata('https://vercel.com')
+const { title: name, video } = await microlink.metadata(url, { video: true })
+```
+
+`meta` is `boolean`, or `{ logo: true | { square: true } }`. `palette: true` colors every image asset.
+
+Pass `extract` rules as `data` to add fields, or to override a normalized one (`title`, `image`, `author`) when the detected value is wrong:
+
+```js
+const { title, price } = await microlink.metadata('https://example.com/product', {
+  data: { price: { selector: '.price', attr: 'text', type: 'number' } }
+})
 ```
 
 ### markdown / html / text
 
-Page content (`string | null`). Scope with `selector`:
+`markdown` and `text` resolve to `string | null`. `selector` scopes to the first match. `selectorAll` resolves to `string[]`, one string per match. `type` overrides normalization (same values as `extract`).
+
+`markdown` keeps headings, links, lists, tables, and code, and drops nav, scripts, and styles. PDFs with a text layer and office files (`docx`, `xlsx`, `pptx`, `odt`, `rtf`, `epub`) convert the same way. `text` is the words only, with collapsed whitespace. `html` is rendered markup (inner HTML of `selector`). For the element including itself, use `extract` with `attr: 'outerHTML'`.
 
 ```js
 const markdown = await microlink.markdown('https://example.com', { selector: 'article' })
+const comments = await microlink.markdown(url, { selectorAll: '.comment' })
+const html = await microlink.html('https://app.example.com', {
+  prerender: true,
+  styles: ['.banner { display: none }']
+})
 ```
 
-### screenshot / pdf
+These three are `extract` rules with `attr: 'markdown' | 'html' | 'text'`. Use `extract` when one call must return Markdown plus other fields.
 
-Returns an asset object (`url`, `type`, `width`, `height`, `size`, …):
+### screenshot(url, options)
+
+Asset hosted on the Microlink CDN. The same call returns the same `url` until `ttl` expires.
+
+| Key | | |
+| --- | --- | --- |
+| `fullPage` | boolean, default `false` | Entire scrollable page, not the viewport |
+| `type` | `'png'` (default) or `'jpeg'` | Image format |
+| `quality` | number, `0`–`100` | JPEG quality |
+| `element` | string | CSS selector. Capture that element once it is visible |
+| `omitBackground` | boolean, default `false` | Transparent background |
+| `overlay` | object | `{ browser?: 'light' \| 'dark', background?: string }` |
+| `codeScheme` | string, default `'atom-dark'` | Prism theme or remote CSS URL for JSON/text responses |
+| `animated` | boolean, default `false` | Record a short MP4/WebM instead of a still |
+| `palette` | boolean | Color fields on the screenshot asset |
+| `optimizeForSpeed` | boolean, default `false` | Favor capture speed over size and fidelity |
 
 ```js
-const { url } = await microlink.screenshot('https://example.com', { fullPage: true })
-const { url: pdfUrl } = await microlink.pdf('https://example.com', { format: 'A4' })
+const { url } = await microlink.screenshot('https://example.com', {
+  element: '#result',
+  omitBackground: true
+})
 ```
 
-Screenshot keys: `fullPage`, `type` (`png`/`jpeg`), `element`, `omitBackground`, `overlay`, `codeScheme`, `animated`, `palette`, `quality`, `optimizeForSpeed`.
+Put the hosted `url` in an `img`. For a URL that renders the image with no SDK call (`og:image`, a README), use an [embed URL](#embed-urls).
 
-PDF keys: `format`, `margin`, `scale`, `landscape`, `pageRanges`, `width`, `height`, `printBackground`.
+### pdf(url, options)
+
+Asset `{ url, type, size, size_pretty }`. The page prints with `mediaType: 'print'`. Pass `mediaType: 'screen'` to print the screen layout.
+
+| Key | | |
+| --- | --- | --- |
+| `format` | `'Letter'`, `'Legal'`, `'Tabloid'`, `'Ledger'`, `'A0'`–`'A6'` | Default `'A4'` |
+| `landscape` | boolean | Landscape orientation |
+| `margin` | string or `{ top, right, bottom, left }` | Each side is a string or number. Default `'0.35cm'` |
+| `scale` | number `0.1`–`2` | Default `0.6` |
+| `pageRanges` | string | e.g. `'1-5, 8, 11-13'` |
+| `width` / `height` | string or number | Custom paper size, e.g. `'640px'` |
+| `printBackground` | boolean | Include background graphics |
+
+```js
+const { url } = await microlink.pdf('https://example.com', {
+  format: 'Letter',
+  landscape: true,
+  margin: { top: '1cm', right: '4mm', bottom: '1cm', left: '4mm' },
+  pageRanges: '1-3'
+})
+```
 
 ### logo(url, options)
 
-Returns an asset or `null`.
+Asset or `null`. Detected from favicons, Apple touch icons, manifest icons, and structured data, then a logo service. `square: true` prefers a square variant (avatars, app icons). `palette: true` adds color fields. The same `logo` is on `metadata` when you also need title and description.
 
 ```js
-const { url } = await microlink.logo('https://github.com', { square: true })
+const { url, palette, background_color } = await microlink.logo('https://stripe.com', {
+  square: true,
+  palette: true
+})
 ```
 
 ### embed(url, options)
 
-oEmbed-style `{ html, scripts }`. Constrain with `maxWidth` / `maxHeight`.
+`{ html: string, scripts?: unknown[] }`. Each script is typically `{ src, async }`. `maxWidth` and `maxHeight` are pixels and are forwarded per the oEmbed spec, so support depends on the provider. The call resolves to `null` when the provider has no embed. Use `metadata` for a static card. Use `video` for a raw playable file.
 
 ```js
-const { html } = await microlink.embed('https://www.youtube.com/watch?v=dQw4w9WgXcQ')
+const { html, scripts } = await microlink.embed('https://www.youtube.com/watch?v=dQw4w9WgXcQ', {
+  maxWidth: 350
+})
 ```
 
-### video / audio
+### video(url) / audio(url)
 
-Primary playable source as an asset, or `null`:
+Primary playable asset, or `null`. `video` includes `width` and `height`. `audio` does not. No method-specific keys. The same asset is `metadata(url, { video: true })` or `{ audio: true }` when you also want the other metadata fields. `videos` / `audios` sweep markup elements. `embed` returns the provider player.
 
 ```js
-const { url } = await microlink.video('https://vimeo.com/76979871')
+const { url, type, duration_pretty } = await microlink.video('https://vimeo.com/76979871')
 ```
 
 ### links / images / videos / audios / emails
 
-Clean `string[]` — absolute, junk-filtered, deduped. Scope collections with `selectorAll`:
+`string[]`, absolute and deduped. Empty is `[]`. `links`, `images`, `videos`, and `audios` take `selector`, `selectorAll`, `attr`, and `type`. `emails` is typed with the shared options; those four keys still route, because the client treats it as a collection.
+
+| Method | Default rule | Drops |
+| --- | --- | --- |
+| `links` | `selectorAll: 'a'`, `attr: 'href'`, `type: 'url'` | `mailto:`, `javascript:`, empty anchors |
+| `images` | `selectorAll: 'img'`, `attr: 'src'`, `type: 'url'` | Non-URL `src`. Lazy galleries: `attr: 'data-src'` |
+| `videos` | `selectorAll: ['video[src]', 'video source[src]']`, `attr: 'src'`, `type: 'url'` | Provider pages (YouTube, Vimeo) have no direct `video` source — use `video` |
+| `audios` | `selectorAll: ['audio[src]', 'audio source[src]']`, `attr: 'src'`, `type: 'url'` | Provider pages (Spotify) — use `audio`. Episode files: `selectorAll: 'a[href$=".mp3"]'`, `attr: 'href'` |
+| `emails` | `selector: 'html'`, `attr: 'html'`, `type: 'email'` | `mailto:` prefix is stripped. Obfuscated addresses are missed — use `function` |
 
 ```js
 const links = await microlink.links('https://example.com', { selectorAll: 'nav a' })
-const emails = await microlink.emails('https://microlink.io')
+const emails = await microlink.emails('https://microlink.io', { selector: 'footer' })
 ```
+
+Open Graph images are not `img` tags. Use `metadata` for the representative image, or `extract` with `type: 'image'` when you need dimensions. Link text next to an href is a nested `extract` rule.
 
 ### extract(url, rules, options)
 
-Custom CSS rules, result unwrapped. Defaults to `meta: false`; pass `meta: true` to also return metadata.
+`rules` is `{ [field: string]: rule | rule[] }`. The result is that object, unwrapped: one key per field, `null` when a rule misses or fails `type`. Defaults to `meta: false`. `meta: true` returns metadata plus these fields.
+
+A `rule` is:
+
+| Key | Type | |
+| --- | --- | --- |
+| `selector` | `string \| string[]` | First CSS match (`querySelector`). An array is a fallback: first typed hit wins |
+| `selectorAll` | `string \| string[]` | Every match. A list of values, or of objects when `attr` is a nested rules object |
+| `attr` | `string \| string[] \| rules` | HTML attribute, or `html` (default), `outerHTML`, `text`, `markdown`, `json`, `val`. A string array is a fallback. An object nests rules under the parent match. `text` collapses whitespace. `json` parses the whole body and cannot combine with `selector` |
+| `type` | see below | How to normalize. Default `'auto'`. `image`, `video`, `audio`, and `logo` become assets |
+| `evaluate` | `string \| (() => unknown)` | JavaScript in the page. A function is serialized to source. Clicks, waits, and `require()` belong in `function` |
+
+`type` is `'audio' \| 'author' \| 'auto' \| 'boolean' \| 'date' \| 'description' \| 'email' \| 'image' \| 'ip' \| 'lang' \| 'logo' \| 'number' \| 'object' \| 'publisher' \| 'regexp' \| 'string' \| 'title' \| 'url' \| 'video'`.
+
+A rule needs `selector`, `selectorAll`, or `evaluate`, or `attr` alone to serialize the whole page. A field that is `rule[]` uses the first rule that yields a value. `page.extract(rules)` takes this same object.
 
 ```js
 const { image } = await microlink.extract('https://microlink.io', {
   image: { selector: 'meta[property="og:image"]', attr: 'content', type: 'image' }
 })
+
+const { stories } = await microlink.extract('https://news.ycombinator.com', {
+  stories: {
+    selectorAll: '.athing',
+    attr: {
+      title: { selector: '.titleline > a', attr: 'text' },
+      url: { selector: '.titleline > a', attr: 'href', type: 'url' }
+    }
+  }
+})
 ```
-
-Single value:
-
-```js
-{ avatar: { selector: '#avatar', attr: 'src', type: 'image' } }
-```
-
-Collection:
-
-```js
-{ stories: { selectorAll: '.titleline > a', attr: 'text' } }
-```
-
-Fallback list (first match wins):
 
 ```js
 {
   title: [
     { selector: 'meta[property="og:title"]', attr: 'content' },
-    { selector: 'title', attr: 'text' },
     { selector: 'h1', attr: 'text' }
   ]
 }
 ```
 
-Nested object:
-
-```js
-{
-  stats: {
-    selector: '.profile',
-    attr: {
-      followers: { selector: '.followers', type: 'number' },
-      stars: { selector: '.stars', type: 'number' }
-    }
-  }
-}
-```
-
-Evaluate JS in the page:
-
 ```js
 { version: { evaluate: 'window.next.version', type: 'string' } }
+{ content: { attr: 'markdown' } }
+{ content: { attr: 'json' } }
 ```
 
-### technologies / lighthouse
+### technologies(url, options)
+
+Wappalyzer array. Each item: `name`, `confidence` (`0`–`100`), `logo` (URL), `url`, `categories` (string[], e.g. `['CDN']`). No method-specific keys.
 
 ```js
 const technologies = await microlink.technologies('https://microlink.io')
-const report = await microlink.lighthouse('https://microlink.io', {
-  onlyCategories: ['performance']
-})
 ```
 
-Lighthouse keys: `onlyCategories`, `onlyAudits`, `skipAudits`, `output`.
+### lighthouse(url, options)
+
+Lighthouse result: `categories` (`.performance.score` and the others), `audits`, `timing`. `output: 'html'` or `'csv'` returns that format instead of the JSON object (default `'json'`). HTML renders at `https://lighthouse.microlink.io/`.
+
+| Key | |
+| --- | --- |
+| `onlyCategories` | string[], e.g. `['performance', 'accessibility']` |
+| `onlyAudits` | string[], e.g. `'largest-contentful-paint'` |
+| `skipAudits` | string[] |
+| `output` | `string` or `string[]`. `'json'` (default), `'html'`, `'csv'` |
+
+`device` changes the emulated form factor. Reports are slow; set a long `ttl`. Other Lighthouse settings such as `preset` are not routed by the SDK.
+
+```js
+const report = await microlink.lighthouse('https://example.com', {
+  onlyCategories: ['performance'],
+  device: 'iPhone 11',
+  ttl: '1d'
+})
+```
 
 ### search(query, options)
 
-Google as structured data. Requires `apiKey`. Operators (`site:`, `filetype:`, quotes) work as-is.
+Google as structured data. Requires `apiKey`. The argument is a query, not a URL. Operators (`site:`, `filetype:`, quotes) pass through. Browser and page options do not apply. `timeout` does.
 
 ```js
 const page = await microlink.search('Lotus Elise S2')
-console.log(page.results) // [{ title, url, description }, ...]
-console.log(page.knowledgeGraph)
-console.log(page.peopleAlsoAsk)
-console.log(page.relatedSearches)
 ```
 
-| `type` | Returns |
+| Option | |
 | --- | --- |
-| `search` (default) | web results + knowledge graph, related questions/searches |
-| `news` | articles with `publisher`, `date`, thumbnail |
-| `images` | full-resolution image URLs with dimensions |
-| `videos` | video metadata with duration |
-| `places` / `maps` | local entities with address, phone, coordinates, ratings, hours |
-| `shopping` | products with parsed `price` and ratings |
-| `scholar` | papers with citation counts and PDF links |
-| `patents` | filings with ISO 8601 dates |
-| `autocomplete` | query suggestions (`value` only) |
+| `type` | Vertical below. Default `'search'` |
+| `limit` | Max results per page |
+| `page` | Page number, default `1`. `page.next()` fetches the next page with the same options |
+| `location` | Two-letter country code, e.g. `'es'` |
+| `period` | `'hour'`, `'day'`, `'week'`, `'month'`, `'year'` |
+| `html` / `markdown` | boolean, default `false`. Fetch that content for the page and every result up front |
+
+The page has `results`, plus `knowledgeGraph`, `peopleAlsoAsk`, and `relatedSearches` when the vertical returns them.
+
+- `knowledgeGraph`: `title?`, `type?`, `website?`, `image? { url }`, `description?`, `descriptionSource?`, `descriptionLink?`, `attributes?` (string record)
+- `peopleAlsoAsk[]`: `question`, `snippet`, `title`, `link`
+- `relatedSearches[]`: `query`
+
+A result with `url` has lazy `.html()` and `.markdown()`. The page has the same helpers. `{ html: true }` or `{ markdown: true }` resolves them immediately. `autocomplete` has no `url`.
+
+| `type` | Result fields |
+| --- | --- |
+| `search` | `title`, `url`, `description` |
+| `news` | `title`, `url`, `description`, `date` (ISO 8601), `publisher`, `image? { url }` |
+| `images` | `title`, `url` (source page), `image { url, width, height }`, `thumbnail { url, width, height }`, `google? { url }`, `creator?`, `credit?` |
+| `videos` | `title`, `url`, `description`, `image? { url }`, `video? { url }`, `duration?` (ms), `duration_pretty?`, `publisher?`, `channel?`, `date?` |
+| `places` | `title`, `address`, `latitude`, `longitude`, `phone? { number }`, `url?`, `cid` |
+| `maps` | `title`, `address`, `latitude`, `longitude`, `rating?`, `ratingCount?`, `price? { level: string }`, `type?`, `types?`, `url?`, `phone? { number }`, `description?`, `opening? { hours: Record<string, string> }`, `thumbnail? { url }`, `cid`, `fid?`, `place? { id }` |
+| `shopping` | `title`, `url`, `publisher`, `price { symbol: string, amount: number }`, `image? { url }`, `rating? { score: number, total: number, reviews?: number }`, `id?` |
+| `scholar` | `title`, `url`, `description`, `publisher`, `year`, `citations`, `pdf? { url }`, `id` |
+| `patents` | `title`, `description`, `url`, `inventor`, `assignee`, `language`, `priority { date }`, `filing { date }`, `grant? { date }`, `publication { date, number }`, `pdf? { url }`, `thumbnail? { url }`, `figures? [{ image: { url }, thumbnail: { url } }]`, `id?` |
+| `autocomplete` | `value` |
 
 ```js
-await microlink.search('open source llm', { type: 'news', period: 'week' })
-await microlink.search('recetas de pasta', { location: 'es', limit: 10 })
-await microlink.search('node.js frameworks', { page: 2 })
-```
+await microlink.search('open source llm', { type: 'news', period: 'week', location: 'us', limit: 10 })
 
-Results with a `url` expose lazy `.html()` and `.markdown()`. The page itself has the same helpers plus `.next()`:
-
-```js
 const page = await microlink.search('site:openai.com function calling guide')
-await Promise.all(
-  page.results.slice(0, 3).map(async result => ({
-    title: result.title,
-    url: result.url,
-    markdown: await result.markdown()
-  }))
-)
+const markdown = await page.results[0].markdown()
+const next = await page.next()
 ```
-
-Eager fetch: `{ html: true }` or `{ markdown: true }` resolves page + every result up front.
-
-Vertical result fields (plus `html()` / `markdown()` when the result has a `url`):
-
-- `search`: `title`, `url`, `description`
-- `news`: + `date`, `publisher`, `image?`
-- `images`: `title`, `url`, `image { url, width, height }`, `thumbnail`
-- `videos`: + `duration`, `duration_pretty`, `publisher`, `channel`
-- `places`: `title`, `address`, `latitude`, `longitude`, `phone? { number }`, `cid`
-- `maps`: places + `rating`, `ratingCount`, `price? { level }`, `opening? { hours }`
-- `shopping`: `title`, `url`, `publisher`, `price { symbol, amount }`, `rating?`
-- `scholar`: `title`, `url`, `publisher`, `year`, `citations`, `pdf?`
-- `patents`: `title`, `url`, `priority`/`filing`/`grant`/`publication` dates, `inventor`, `assignee`, `pdf?`
-- `autocomplete`: `value` only (no `url`)
 
 ### function(url, code, options)
 
-Run JavaScript in Microlink's sandbox. If the code does not reference `page`, no browser starts.
+JavaScript in Microlink's sandbox. `run` is the same method. Code that never mentions `page` does not start a browser.
 
-Args: `page` (Puppeteer `Page`, plus `metadata()` / `extract(rules)`), `response`, `headers`, `url`, and any extra options forwarded into scope.
+The function is typed as `({ page, response, headers, url })`. `response` is the Puppeteer `HTTPResponse` of the navigation. `headers` is `Record<string, string>`. Any option that is not an API parameter is also a named argument. `response` is present when the code uses `page`. `require()` any npm package (`require('cheerio@1.0.0')` to pin). The SDK compresses the body; the free code-size limit applies to the compressed payload. You can also pass code as a string.
 
-Prefer `extract` for simple DOM fields, and `styles`/`scripts`/`modules` for injection. Use `function` when you need to click, wait, compute, or `require()` a package.
+`page` is a Puppeteer `Page`, plus:
+
+- `page.extract(rules)` — `rules` is the `{ [field]: rule | rule[] }` object defined in `extract(url, rules, options)`. Returns one key per field, `null` on a miss. After `click`, `waitForSelector`, or navigation, the rules read the DOM those steps left behind. Literal selector rules read the fetched HTML and skip the browser. A rule with `evaluate`, or any other `page` method, reads the live page.
+- `page.metadata()` — unified metadata for the request URL (`title`, `description`, `image`, …).
+
+Prefer `extract` when the fields are already in the fetched page, and `styles` / `scripts` / `modules` / `click` / `waitForSelector` to prepare the page before the function runs. Use `function` to click, wait, compute, or `require()` a package. Prefer `page.title()`, `page.$eval()`, and `page.waitForSelector()` over `page.evaluate()` and fixed timeouts.
 
 ```js
-const { value } = await microlink.function('https://example.com', () => 40 + 2)
-
-const { value: title } = await microlink.function('https://example.com', async ({ page }) => {
-  await page.waitForSelector('h1')
-  return page.$eval('h1', el => el.textContent)
+const { value: items } = await microlink.function('https://example.com', async ({ page }) => {
+  await page.click('button.load-more')
+  await page.waitForSelector('.item')
+  return page.extract({
+    items: {
+      selectorAll: '.item',
+      attr: {
+        title: { selector: 'h2', attr: 'text' },
+        price: { selector: '.price', type: 'number' }
+      }
+    }
+  })
 })
+
+const { value: title } = await microlink.function(
+  'https://example.com',
+  ({ page, selector }) => page.$eval(selector, el => el.textContent),
+  { selector: 'h1' }
+)
 ```
 
-Extra options are forwarded into function scope. `require()` any npm package (`require('cheerio@1.0.0')` to pin). Result: `isFulfilled`, `value`, `logging`, `profiling`. Thrown code still resolves — `isFulfilled` is `false` and `value` is `{ name, message }`.
-
-Prefer `page.title()`, `page.$eval()`, `page.waitForSelector()` over `page.evaluate()` and fixed timeouts. Set `meta: false` unless you need metadata.
+Result: `{ isFulfilled, value, logging, profiling }`. A throw still resolves: `isFulfilled` is `false` and `value` is `{ name, message }`. `profiling` has `phases` (`install`, `build`, `spawn`, `run`, `total`), `cpu`, `memory`, and `size`. `logging` is captured console output. The method sends `meta: false`. Pass `meta: true` to also get metadata on the API response.
 
 | | Free | Pro |
 | --- | --- | --- |
-| Timeout | 10s | up to 60s |
-| Memory | 16 MB | 32 MB |
+| Timeout | 15s | 60s |
+| Memory | 64 MB | 128 MB |
 | Code size | 1024 bytes | unlimited |
 | Concurrency | 1 per IP | unlimited |
+| Outgoing requests | same origin only | unrestricted |
 
-Resource errors: `TimeoutError`, `CpuTimeError`, `MemoryError`, `CodeSizeError`, `ConcurrencyError`. Function errors: `EINVALFUNCTION` (syntax), `EINVALEVAL` (runtime).
+Limit errors resolve with `isFulfilled: false`: `TimeoutError`, `CpuTimeError`, `MemoryError`, `CodeSizeError`, `OutgoingRequestError`. Syntax is `EINVALFUNCTION`. A runtime throw is `EINVALEVAL`.
 
-## Shared Browser / Cache Options
+## Shared options
 
-Available on most URL products:
+Any URL product takes these alongside its own keys. `search` does not, except `timeout`.
 
-- Browser: `prerender`, `waitUntil`, `waitForSelector`, `waitForTimeout`, `timeout`, `device`, `viewport`, `javascript`, `animations`, `adblock`, `mediaType`, `colorScheme`, `click`, `scroll`, `scripts`, `modules`, `styles`
-- Cache: `force`, `ttl` (Pro), `staleTtl` (Pro), `cacheKey` (Pro), `retry`
-- Pro: `headers`, `proxy`, `filename`
+### Browser
 
-If metadata is not needed, product methods already set `meta: false`.
+- `device` `<string>` — preset viewport, user agent, and capabilities. Default `'macbook pro 13'`. Case-insensitive. iPhone, iPad, Galaxy, Pixel, MacBook, iMac, and others.
+- `viewport` `<object>` — `width`, `height`, `deviceScaleFactor`, `isMobile`, `hasTouch`, `isLandscape`. Partial objects merge with the device preset.
+- `colorScheme` `<string>` — `'light'`, `'dark'`, or `'no-preference'` (default).
+- `mediaType` `<string>` — `'screen'` (default) or `'print'`. PDF defaults to `'print'`.
+- `javascript` `<boolean>` — default `true`.
+- `animations` `<boolean>` — CSS animations and transitions. Default `false`.
+- `adblock` `<boolean>` — ads, trackers, and cookie consent. Default `true`.
+
+### Page
+
+- `prerender` `<boolean | 'auto'>` — `true` forces a headless browser (SPAs). `false` is a plain GET. Default `'auto'`.
+- `waitUntil` `<string | string[]>` — `'auto'` (default), `'load'`, `'domcontentloaded'`, `'networkidle0'`, `'networkidle2'`.
+- `waitForSelector` `<string>` — wait until this CSS selector exists.
+- `waitForTimeout` `<number>` — milliseconds. Prefer `waitForSelector`. The API also accepts a duration string such as `'3s'`.
+- `timeout` `<number>` — milliseconds for the whole request. Default about 30s free, 60s pro. The API also accepts `'30s'`.
+- `click` `<string | string[]>` — click these selectors before the product runs.
+- `scroll` `<string>` — scroll to this selector.
+- `scripts` / `modules` / `styles` `<string | string[]>` — inject script, `<script type="module">`, or CSS. Inline source or an absolute URL.
+
+### Cache and request
+
+- `ttl` `<string | number>` — cache lifetime, `1m`–`31d`. Default `'24h'`. Aliases `'min'` and `'max'`. **Pro.**
+- `staleTtl` `<string | number>` — serve stale while refreshing. `0` always revalidates in the background. Must be below `ttl`. **Pro.**
+- `cacheKey` `<string>` — extra cache-key segment. **Pro.**
+- `force` `<boolean>` — skip the cache. Default `false`.
+- `retry` `<number>` — retries after an internal browser error. Default `2`.
+- `ping` `<boolean | object>` — check that URLs in the payload are reachable. Default `true`. Disable per type: `{ audio: false }`.
+- `palette` `<boolean>` — color fields on image assets. Default `false`.
+- `filter` `<string>` — comma-separated fields to keep, with dot paths: `'url,title,image.url'`.
+- `proxy` `<string | { url } | { location }>` — HTTP proxy, or a country via `{ location }`. **Pro.**
+- `filename` `<string>` — download name for a generated asset. **Pro.**
+- `headers` `<object>` — sent as real request headers, never in the URL. `x-api-header-<name>` is forwarded to the target as `<name>`. **Pro.**
+
+`metadata` returns the normalized fields. Every other method returns only its own value. `logo` still runs metadata detection to find the mark. Pass `meta: true` on `extract` or `function` when the caller also needs those fields.
+
+## Raw HTTP
+
+Without the SDK, each product is a `GET` to `api.microlink.io` or `pro.microlink.io`. Names accept `camelCase` and `snake_case`. Nested keys use dots (`screenshot.fullPage`). Encode every value.
+
+The body is JSend. Read the product from `data`. `status` is `success`, `fail`, or `error`. A fetched page also includes `statusCode`, `headers`, and `redirects` on `data`. `embed` replaces the JSON with that field's body. A `fail` body has `code`, `message`, `more`, and field errors on `data`. The id is `x-request-id`.
+
+| Product | Query |
+| --- | --- |
+| `metadata` | `url` (`meta` defaults to `true`) |
+| `markdown` / `html` / `text` | `data.content.attr=markdown` (or `html`, `text`), plus `data.content.selector` |
+| `screenshot` | `screenshot=true` or `screenshot.fullPage=true` |
+| `pdf` | `pdf=true` or `pdf.format=A4` |
+| `logo` | `meta=true`, read `data.logo`. Square: `meta.logo.square=true` |
+| `embed` | `iframe=true`, `iframe.maxWidth` |
+| `video` / `audio` | `video=true` / `audio=true` |
+| `links` / `images` / `videos` / `audios` / `emails` | the default `data` rule for that method |
+| `extract` | `data.<field>.selector`, `.attr`, `.type`, `.selectorAll`, `.evaluate` |
+| `technologies` | `insights.technologies=true` |
+| `lighthouse` | `insights.lighthouse=true`, `insights.lighthouse.onlyCategories` |
+| `function` | `function=<source>`. Compress with an `lz#`, `gz#`, or `br#` prefix |
+
+`meta=false` when the caller only wants the asset or `data` fields. A fallback list is numbered: `data.title.0.selector=h1`, `data.title.1.selector=title`. The Pro key is the `x-api-key` header.
+
+## Embed URLs
+
+Return one field as the response body, for an `img`, CSS background, or Open Graph tag. Do not put an API key in the URL.
+
+```html
+<img src="https://api.microlink.io/?url=https://example.com&screenshot=true&meta=false&embed=screenshot.url">
+```
+
+Paths: `screenshot.url`, `pdf.url`, `image.url`, `logo.url`, `video.url`.
 
 ## Authentication
 
@@ -304,14 +454,16 @@ await microlink.markdown('https://x.com/some/article', {
 })
 ```
 
-- Free: `https://api.microlink.io` — 50 requests/day, no key
-- Pro: `https://pro.microlink.io` — set `apiKey` (or `endpoint` to override)
+- Free: `https://api.microlink.io` — no key, soft limit of 25 requests
+- Pro: `https://pro.microlink.io` — set `apiKey` (or `endpoint` to override). Quota starts at 14,000 on the key's plan
+
+A key sent to `api.microlink.io` returns `EPRO`. `x-pricing-plan` is `free` or `pro`. Free responses include `x-rate-limit-limit`, `x-rate-limit-remaining`, and `x-rate-limit-reset` (UTC epoch seconds). Parallel requests are allowed inside the quota. HTTP 429 is `ERATE`.
 
 Never expose `apiKey` in client-side code. Proxy through a server (`microlinkhq/proxy` or `microlinkhq/edge-proxy`).
 
 ## Error Handling
 
-API errors reject with `MicrolinkError` (`code`, `statusCode`, `description`):
+API errors reject with `MicrolinkError`: `status`, `code`, `statusCode`, `description`, `url`, `headers`, `more`.
 
 ```js
 import createClient, { MicrolinkError } from 'microlink.io'
@@ -323,7 +475,18 @@ try {
 }
 ```
 
-Common codes: `EAUTH`, `ERATE`, `EINVALURL`, `EBRWSRTIMEOUT`, `EPRO`, `ETIMEOUT`.
+`client.last` is the last call: `requestUrl`, `requestOptions`, and `response` (status, headers such as `x-request-id`, `x-cache-status`, `x-fetch-mode`).
+
+| Code | What to do |
+| --- | --- |
+| `EAUTH` | API key is invalid |
+| `ERATE` | Quota spent. Wait for `x-rate-limit-reset` or use a key |
+| `EINVALURL` | URL must be a WHATWG URL with `http` or `https` |
+| `EBRWSRTIMEOUT` / `ETIMEOUT` | Simplify the page, or raise `timeout` (pro: up to 60s) |
+| `EPRO` / `EHEADERS` / `EPROXY` / `ETTL` / `ESTTL` / `EFILENAME` | That option needs Pro (`apiKey` → `pro.microlink.io`) |
+| `EPROXYNEEDED` | The target blocked the datacenter IP. Use Pro `proxy` |
+| `EMAXREDIRECTS` | More than 10 redirects |
+| `EINVALTTL` / `EINVALSTTL` | `ttl` is `1m`–`31d`. `staleTtl` must be below `ttl` |
 
 ## CLI
 
@@ -374,6 +537,19 @@ If those tools are missing:
 }
 ```
 
-Tool names are `microlink_<method>` (`screenshot` → `microlink_screenshot`). Call `microlink_docs({ product })` before guessing nested options. Don't shell out to `npx microlink.io` for one-shot chat work when MCP is available.
+Tool names are `microlink_<method>` (`screenshot` → `microlink_screenshot`). Arguments are the options in this file. Booleans accept `"true"` / `"false"`. Objects accept JSON strings. `screenshot`, `pdf`, and insights accept `true` or an object; `{}` is `true`.
 
-Config, checkout onboarding, and error envelopes: https://raw.githubusercontent.com/microlinkhq/skills/master/microlink-mcp/SKILL.md
+`microlink_function` takes `code` as a source string (`"async ({ page }) => page.title()"`). `microlink_search` takes `query` and requires a key. `microlink_docs({ product })` returns this same reference; do not call it to discover options you already have here.
+
+Success is `{ data }` under `structuredContent` — the direct result (`markdown` is a string, `screenshot` is an asset, `links` is `string[]`). Failure is MCP `isError` plus `{ error: { message, code?, status?, statusCode?, hint?, reason? } }`. `reason: "upgrade_required"` means a Pro capability (`EPROXYNEEDED`, `EINTEGRATION`). `reason: "quota_exceeded"` is the free quota. Read `hint` before retrying.
+
+No key, and the call needs Pro or `search`:
+
+1. `microlink_list_plans` — pick a `planId`
+2. `microlink_create_checkout_session` — `email`, `planId`; optional `label`, `idempotencyKey`
+3. Give `checkoutUrl` to the human. Do not open or complete it
+4. Poll `microlink_get_checkout_session` with `sessionId` until `ready` or `expired`
+
+`ready` includes `keyId`. The secret is emailed. It is not in the tool result. Key resolution: tool `apiKey`, then `Authorization: Bearer`, then `x-api-key`, then `MICROLINK_API_KEY`.
+
+Don't shell out to `npx microlink.io` for one-shot chat work when MCP is available.

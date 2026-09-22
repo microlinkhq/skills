@@ -23,7 +23,7 @@ The script inspects `git status --porcelain` and reports:
 - `SKILL.md` missing frontmatter, `name`, or `description`
 - Frontmatter `name` not matching the directory name or not kebab-case
 - `description` over 1024 characters
-- Touched skill missing its `### <name>` README section or install command (`npx -y skills add microlinkhq/skills/<name>`)
+- Touched skill missing its `### <name>` README section or install command (`npx -y skills add microlinkhq/skills/<name>`). Skipped when `description` starts with `Not an entry point.`
 - README section added in this diff pointing to a non-existent directory
 - `.DS_Store` or `node_modules` about to be committed
 

@@ -1,13 +1,12 @@
 # Screenshot generation
 
-```js
-import createClient from 'microlink.io'
-
-const microlink = createClient()
-const { url } = await microlink.screenshot('https://example.com', {
-  fullPage: true,
-  type: 'png'
-})
-
-console.log(url)
+```bash
+curl -G "https://api.microlink.io" \
+  --data-urlencode "url=https://example.com" \
+  --data-urlencode "screenshot=true" \
+  --data-urlencode "screenshot.fullPage=true" \
+  --data-urlencode "screenshot.type=png" \
+  --data-urlencode "meta=false"
 ```
+
+The image URL is `data.screenshot.url`.

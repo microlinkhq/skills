@@ -1,9 +1,8 @@
 # Metadata extraction
 
-```js
-import createClient from 'microlink.io'
-
-const microlink = createClient()
-const { title, description, image } = await microlink.metadata('https://example.com')
-console.log(title, description, image?.url)
+```bash
+curl -G "https://api.microlink.io" \
+  --data-urlencode "url=https://example.com"
 ```
+
+`data.title`, `data.description`, and `data.image.url`.
