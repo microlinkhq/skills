@@ -366,7 +366,7 @@ Result: `{ isFulfilled, value, logging, profiling }`. A throw still resolves: `i
 | Concurrency | 1 per IP | unlimited |
 | Outgoing requests | same origin only | unrestricted |
 
-Limit errors resolve with `isFulfilled: false`: `TimeoutError`, `CpuTimeError`, `MemoryError`, `CodeSizeError`, `OutgoingRequestError`. Syntax is `EINVALFUNCTION`. A runtime throw is `EINVALEVAL`.
+Limit errors resolve with `isFulfilled: false`: `TimeoutError`, `CpuTimeError`, `MemoryError`, `CodeSizeError`, `ConcurrencyError`, `OutgoingRequestError`. Syntax is `EINVALFUNCTION`. A runtime throw is `EINVALEVAL`.
 
 ## Shared options
 

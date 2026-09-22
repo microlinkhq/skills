@@ -253,12 +253,13 @@ Prefix the code with `lz#`, `gz#`, or `br#` when the source is compressed. Throw
 
 | | Free | Pro |
 | --- | --- | --- |
-| Timeout | 10s | up to 60s |
-| Memory | 16 MB | 32 MB |
+| Timeout | 15s | 60s |
+| Memory | 64 MB | 128 MB |
 | Code size | 1024 bytes | unlimited |
 | Concurrency | 1 per IP | unlimited |
+| Outgoing requests | same origin only | unrestricted |
 
-Resource errors: `TimeoutError`, `CpuTimeError`, `MemoryError`, `CodeSizeError`, `ConcurrencyError`. Function errors: `EINVALFUNCTION` (syntax), `EINVALEVAL` (runtime).
+Resource errors: `TimeoutError`, `CpuTimeError`, `MemoryError`, `CodeSizeError`, `ConcurrencyError`, `OutgoingRequestError`. Function errors: `EINVALFUNCTION` (syntax), `EINVALEVAL` (runtime).
 
 ## Embed URLs
 

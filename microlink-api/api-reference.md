@@ -234,7 +234,7 @@ Custom browser viewport: `width`, `height`, `deviceScaleFactor`, `isMobile`, `ha
 
 ## Compression
 
-Brotli (`br`) and gzip (`gz`) are supported. Send `Accept-Encoding` and check `content-encoding` on the response.
+Brotli (`br`) and gzip are supported. Send `Accept-Encoding` and check `content-encoding` on the response.
 
 ## Rate Limiting
 
