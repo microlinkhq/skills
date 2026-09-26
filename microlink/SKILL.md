@@ -490,11 +490,12 @@ try {
 
 ## CLI
 
-`npx microlink.io` works without a global install. `buy` purchases a key; `login` saves one; `logout` clears it. A bare URL defaults to `metadata`. `<product> docs` prints canonical parameter markdown.
+`npx microlink.io` works without a global install. `buy` purchases a key; `login` saves one; `logout` clears it. `setup` detects installed coding agents and installs this skill for them. A bare URL defaults to `metadata`. `<product> docs` prints canonical parameter markdown.
 
 ```bash
 npx microlink.io buy
 npx microlink.io login
+npx microlink.io setup
 npx microlink.io help screenshot
 npx microlink.io markdown docs
 npx microlink.io https://example.com
