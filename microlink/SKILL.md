@@ -1,6 +1,6 @@
 ---
 name: microlink
-description: Complete Microlink product reference — return shapes, options, CLI, and when to run a method over HTTP or MCP. Use when the user mentions Microlink, microlink.io, api.microlink.io, screenshots, PDFs, markdown, scraping, embed URLs, the microlink CLI, or wiring Microlink into an assistant. This file is enough to call any product. Installs @microlink/mcp when this session must execute a product.
+description: Complete Microlink product reference — return shapes, options, CLI, and when to run a method over HTTP or MCP. Use when the user mentions Microlink, microlink.io, api.microlink.io, screenshots, PDFs, markdown, scraping, embed URLs, the microlink CLI, or wiring Microlink into an assistant, or wants to report a Microlink bug or feedback. This file is enough to call any product. Installs @microlink/mcp when this session must execute a product.
 ---
 
 # microlink.io
@@ -487,6 +487,34 @@ try {
 | `EPROXYNEEDED` | The target blocked the datacenter IP. Use Pro `proxy` |
 | `EMAXREDIRECTS` | More than 10 redirects |
 | `EINVALTTL` / `EINVALSTTL` | `ttl` is `1m`–`31d`. `staleTtl` must be below `ttl` |
+
+## Reporting problems
+
+When Microlink misbehaves (an unexpected error, wrong or incomplete output, docs that disagree with the API, or a missing feature), report it to the Microlink team with one HTTP request. No account and no credits. Report only after ruling out your own mistake: a wrong parameter, an expected error from the table above, or a target page that is itself broken.
+
+```bash
+curl -X POST https://feedback.microlink.io/api/v1/feedback \
+  -H 'content-type: application/json' \
+  -d '{
+  "category": "quality_degradation",
+  "note": "markdown drops the pricing table; expected all 4 tiers.",
+  "request_id": "iad:2c1f8a1e-4b7d-4f0e-9a51-6f2f1d9b8c3a",
+  "request_url": "https://api.microlink.io/?url=https%3A%2F%2Fstripe.com%2Fpricing&markdown=true"
+}'
+```
+
+| Field | Notes |
+| --- | --- |
+| `category` | Required: `bug`, `quality_degradation`, `docs_mismatch`, `friction`, `feature_gap` or `other` |
+| `note` | Required: what happened and what you expected, up to 4000 characters |
+| `request_id` | The `x-request-id` response header (`client.last.response.headers`) |
+| `request_url` | The full API URL you called (`client.last.requestUrl`). Values of `headers.*` and `proxy` are redacted before storing |
+| `error_code` | The error `code`, e.g. `EFATAL` |
+| `contact_email` | Only with the user's consent: where the team can say when it is fixed |
+
+`bug` and `quality_degradation` need `request_id` or `request_url`: the bare target URL is not enough to reproduce the call. If your HTTP tool can only GET, send the same fields as query parameters to the same URL.
+
+The response holds a `receipt` URL. `GET` it to follow up: it returns your stored `report`, the `status` (`open`, `triaged`, `resolved`, `wontfix`), and the team's `reply` once it is resolved. A `400` names every invalid field in `errors`. The full contract is at `https://feedback.microlink.io/.well-known/agent-feedback.json`.
 
 ## CLI
 
