@@ -74,7 +74,7 @@ Local checkout:
 | --- | --- | --- |
 | `microlink_docs` | `microlink <product> docs` | canonical product markdown |
 | `microlink_list_plans` | dashboard Checkout API | plans a new customer can buy |
-| `microlink_create_checkout_session` | dashboard Checkout API | `{ checkoutUrl, sessionId, … }` |
+| `microlink_create_checkout_session` | dashboard Checkout API | `{ connectUrl, sessionId, idempotencyKey }` |
 | `microlink_get_checkout_session` | dashboard Checkout API | `open` / `paid` / `ready` / `expired` |
 | `microlink_metadata` | `metadata(url)` | title, description, image, logo, … |
 | `microlink_logo` | `logo(url)` | logo asset or `null`; `square` prefers icon variant |
@@ -122,11 +122,12 @@ Product tools are `readOnlyHint: true` except `microlink_function` (runs caller 
 ### Onboarding (no API key)
 
 1. `microlink_list_plans` — pick a `planId`
-2. `microlink_create_checkout_session` — `email`, `planId`; optional `label`, `idempotencyKey`
-3. Give `checkoutUrl` to the human. Never open or complete it.
-4. Poll `microlink_get_checkout_session` with `sessionId` until `ready` or `expired`
+2. `microlink_create_checkout_session` — `planId`; optional `label`, `idempotencyKey`. `email` is rejected. A free development key is dashboard Sign up (`https://dashboard.microlink.io/signup`), not this tool.
+3. Give `connectUrl` to the human on the machine running MCP. Do not open it. They sign in; the dashboard calls back to that machine.
+4. Poll `microlink_get_checkout_session` with `sessionId`. When `checkoutUrl` appears, give that to the human to pay. Never open or complete it.
+5. Keep polling until `ready` or `expired`
 
-`ready` includes `keyId` (non-secret handle). The API key secret is never returned here (welcome email / dashboard).
+`ready` does not include the API key secret (welcome email / dashboard). Reuse `idempotencyKey` when retrying create.
 
 ## Response Shape
 
