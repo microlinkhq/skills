@@ -575,10 +575,11 @@ Success is `{ data }` under `structuredContent` — the direct result (`markdown
 No key, and the call needs Pro or `search`:
 
 1. `microlink_list_plans` — pick a `planId`
-2. `microlink_create_checkout_session` — `email`, `planId`; optional `label`, `idempotencyKey`
-3. Give `checkoutUrl` to the human. Do not open or complete it
-4. Poll `microlink_get_checkout_session` with `sessionId` until `ready` or `expired`
+2. `microlink_create_checkout_session` — `planId`; optional `label`, `idempotencyKey`. `email` is rejected. A free development key is dashboard Sign up (`https://dashboard.microlink.io/signup`), not this tool.
+3. Give `connectUrl` to the human on the machine running MCP. Do not open it. They sign in; the dashboard calls back to that machine.
+4. Poll `microlink_get_checkout_session` with `sessionId`. When `checkoutUrl` appears, give that to the human to pay. Do not open or complete it.
+5. Keep polling until `ready` or `expired`
 
-`ready` includes `keyId`. The secret is emailed. It is not in the tool result. Key resolution: tool `apiKey`, then `Authorization: Bearer`, then `x-api-key`, then `MICROLINK_API_KEY`.
+`ready` does not include the API key secret (welcome email / dashboard). Reuse `idempotencyKey` when retrying create. Key resolution: tool `apiKey`, then `Authorization: Bearer`, then `x-api-key`, then `MICROLINK_API_KEY`.
 
 Don't shell out to `npx microlink.io` for one-shot chat work when MCP is available.
