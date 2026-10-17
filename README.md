@@ -71,7 +71,7 @@ Execute a remote agent skill from a skills.sh or GitHub URL without installing i
 
 > `npx -y skills add microlinkhq/skills/skill-goal`
 
-Run a named skill against a pull request until a fresh pass names nothing left to change. Use when the user invokes `/skill-goal <skill> <PR>`, including `/code-review-and-quality` and `/code-simplification`.
+Run `/code-review-and-quality` on a pull request until a fresh pass names no changes, then `/code-simplification` until a fresh pass names nothing to simplify. Use when the user invokes `/skill-goal <PR>`.
 
 ### youtube-dl-exec
 
