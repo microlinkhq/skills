@@ -244,7 +244,9 @@ Quota depends on the endpoint. See [Rate limit](https://microlink.io/docs/api/ba
 - Free API key (development plan): 25 requests per day, sign up at https://dashboard.microlink.io/signup
 - Pro (authenticated): the plan on the API key, from 46,000 requests per month
 
-HTTP 429 (`ERATE`) when the quota is spent. Wait for reset, or upgrade. No throttling — parallel requests are allowed inside the quota.
+HTTP 429 (`ERATE`) when the quota is spent. Wait for reset, or upgrade.
+
+The keyless endpoint and the free API key run up to 2 concurrent requests (per IP without a key, per key with one). Requests above that also get 429 with quota left: wait a second and retry instead of waiting for the reset. Paid plans don't throttle: parallel requests are allowed inside the quota.
 
 Free responses carry the current window:
 

@@ -295,7 +295,7 @@ Free responses include the current window:
 
 | Header | Meaning |
 | --- | --- |
-| `x-rate-limit-limit` | Maximum requests permitted per minute |
+| `x-rate-limit-limit` | Maximum requests permitted in the current window (per day on the free tiers, per month on paid plans) |
 | `x-rate-limit-remaining` | Requests left in the current window |
 | `x-rate-limit-reset` | Window reset, UTC epoch seconds |
 
