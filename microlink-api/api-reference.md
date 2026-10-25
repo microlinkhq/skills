@@ -240,16 +240,19 @@ Brotli (`br`) and gzip are supported. Send `Accept-Encoding` and check `content-
 
 Quota depends on the endpoint. See [Rate limit](https://microlink.io/docs/api/basics/rate-limit).
 
-- Free (unauthenticated): soft limit of 25 requests
-- Pro (authenticated): the plan on the API key, from 14,000 requests
+- Free (unauthenticated): 5 requests per day
+- Free API key (development plan): 25 requests per day, sign up at https://dashboard.microlink.io/signup
+- Pro (authenticated): the plan on the API key, from 46,000 requests per month
 
-HTTP 429 (`ERATE`) when the quota is spent. Wait for reset, or upgrade. No throttling — parallel requests are allowed inside the quota.
+HTTP 429 (`ERATE`) when the quota is spent. Wait for reset, or upgrade.
+
+The keyless endpoint and the free API key run up to 2 concurrent requests (per IP without a key, per key with one). Requests above that also get 429 with quota left: wait a second and retry instead of waiting for the reset. Paid plans don't throttle: parallel requests are allowed inside the quota.
 
 Free responses carry the current window:
 
 | Header                   | Description                                                                  |
 | ------------------------ | ---------------------------------------------------------------------------- |
-| `x-rate-limit-limit`     | Maximum requests permitted per minute                                        |
+| `x-rate-limit-limit`     | Maximum requests permitted per day                                           |
 | `x-rate-limit-remaining` | Requests remaining in the current window                                     |
 | `x-rate-limit-reset`     | When the current window resets, as UTC epoch seconds                         |
 
@@ -289,7 +292,7 @@ Free responses carry the current window:
 | `x-fetch-time`           | Time spent fetching                                |
 | `x-response-time`        | Total response time                                |
 | `x-request-id`           | Unique request identifier                          |
-| `x-rate-limit-limit`     | Free plan. Maximum requests permitted per minute   |
+| `x-rate-limit-limit`     | Free plan. Maximum requests permitted per day      |
 | `x-rate-limit-remaining` | Free plan. Requests remaining in the current window |
 | `x-rate-limit-reset`     | Free plan. Window reset, UTC epoch seconds         |
 | `cf-cache-status`        | CloudFlare edge cache status                       |

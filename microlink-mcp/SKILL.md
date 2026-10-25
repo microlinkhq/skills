@@ -17,7 +17,7 @@ npx -y @microlink/mcp
 
 Optional global: `npm install -g @microlink/mcp` then `microlink-mcp`.
 
-Free plan is 50 requests/day. Set `MICROLINK_API_KEY` for Pro: [microlink.io/#pricing](https://microlink.io/#pricing).
+The keyless endpoint gives 5 requests/day; a free development key gives 25/day. Set `MICROLINK_API_KEY` for Pro: [microlink.io/#pricing](https://microlink.io/#pricing).
 
 ## Client Config
 
@@ -141,7 +141,7 @@ Success: library result under `structuredContent.data` (and pretty-printed JSON 
 
 Nullable fields can legitimately be absent (`logo`, `markdown` when the selector matches nothing).
 
-Failure: MCP `isError` plus `{ error: { message, code?, status?, statusCode?, url?, more?, details? } }`. Capability errors (`EPROXYNEEDED`, `EINTEGRATION`) also include `reason: "upgrade_required"`, `capability`, `upgrade`, and `hint`. A `429` includes `reason: "quota_exceeded"` and a free-quota hint (50/day). Read `hint`/`reason` instead of retrying blindly.
+Failure: MCP `isError` plus `{ error: { message, code?, status?, statusCode?, url?, more?, details? } }`. Capability errors (`EPROXYNEEDED`, `EINTEGRATION`) also include `reason: "upgrade_required"`, `capability`, `upgrade`, and `hint`. A `429` includes `reason: "quota_exceeded"` and a hint naming the keyless quota (5/day); with an API key, the limit is the quota on that key. Read `hint`/`reason` instead of retrying blindly.
 
 Parameters labeled PRO in Microlink docs need a paid plan.
 

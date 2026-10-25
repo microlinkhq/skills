@@ -454,8 +454,8 @@ await microlink.markdown('https://x.com/some/article', {
 })
 ```
 
-- Free: `https://api.microlink.io` — no key, soft limit of 25 requests
-- Pro: `https://pro.microlink.io` — set `apiKey` (or `endpoint` to override). Quota starts at 14,000 on the key's plan
+- Free: `https://api.microlink.io` — no key, 5 requests per day
+- Pro: `https://pro.microlink.io` — set `apiKey` (or `endpoint` to override). A free development key gets 25 requests per day; paid plans start at 46,000 per month
 
 A key sent to `api.microlink.io` returns `EPRO`. `x-pricing-plan` is `free` or `pro`. Free responses include `x-rate-limit-limit`, `x-rate-limit-remaining`, and `x-rate-limit-reset` (UTC epoch seconds). Parallel requests are allowed inside the quota. HTTP 429 is `ERATE`.
 

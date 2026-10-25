@@ -11,8 +11,8 @@ Parameter names accept `camelCase` and `snake_case`. Nested options use dots (`s
 
 ## Endpoints
 
-- Free: `https://api.microlink.io` — no key, soft limit of 25 requests
-- Pro: `https://pro.microlink.io` — `x-api-key` request header, from 14,000 requests on the key's plan
+- Free: `https://api.microlink.io` — no key, 5 requests per day
+- Pro: `https://pro.microlink.io` — `x-api-key` request header. A free development key gets 25 requests per day; paid plans start at 46,000 requests per month
 
 ```bash
 curl -G "https://api.microlink.io" \
@@ -289,13 +289,13 @@ Common codes: `EAUTH`, `ERATE`, `EINVALURL`, `EBRWSRTIMEOUT`, `EPRO`, `ETIMEOUT`
 
 ## Rate Limit
 
-Quota follows the endpoint ([rate limit](https://microlink.io/docs/api/basics/rate-limit)). Free is a soft limit of 25 requests. Pro starts at 14,000 on the API key's plan. HTTP 429 (`ERATE`) means the quota is spent — wait for reset, or upgrade. Parallel requests are allowed inside the quota.
+Quota follows the endpoint ([rate limit](https://microlink.io/docs/api/basics/rate-limit)). Keyless is 5 requests per day. A free development key is 25 per day. Paid plans start at 46,000 per month. HTTP 429 (`ERATE`) means the quota is spent — wait for reset, or upgrade. Parallel requests are allowed inside the quota.
 
 Free responses include the current window:
 
 | Header | Meaning |
 | --- | --- |
-| `x-rate-limit-limit` | Maximum requests permitted per minute |
+| `x-rate-limit-limit` | Maximum requests permitted in the current window (per day on the free tiers, per month on paid plans) |
 | `x-rate-limit-remaining` | Requests left in the current window |
 | `x-rate-limit-reset` | Window reset, UTC epoch seconds |
 
