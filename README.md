@@ -67,6 +67,12 @@ Build and operate Keyv-based caching and key-value storage using `@keyvhq/core` 
 
 Execute a remote agent skill from a skills.sh or GitHub URL without installing it on the system. Use when the user invokes `/run-skill <url>`, shares a skills.sh link, points to a SKILL.md on GitHub, or asks to run a skill one-off without adding it to their machine.
 
+### difftool
+
+> `npx -y skills add microlinkhq/skills/difftool`
+
+Visual regression diffs between two URLs or two images with microlink difftool, via its CLI, its GitHub Action (sticky PR comment with screenshots), or the web app at difftool.microlink.io. Use when the user mentions difftool, visual diff, visual regression, comparing a preview deploy against production, screenshot diffs on pull requests, or comparing two images side by side, including private local images.
+
 ### skill-goal
 
 > `npx -y skills add microlinkhq/skills/skill-goal`
