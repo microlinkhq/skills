@@ -14,6 +14,7 @@ Pick the surface by the job:
 | Check a preview URL against production once, locally or in a script | [CLI](#cli) |
 | Comment a visual diff on every pull request | [GitHub Action](#github-action) |
 | Look at two images (screenshots, local files) side by side | [Web app](#web-app) |
+| Share a difftool link for images on this machine (e.g. screenshots of `localhost`) | [Local images in a link](#local-images-in-a-link) |
 
 ## CLI
 
@@ -79,6 +80,7 @@ jq -r '.routes[] | "\(.verdict)\t\(.diffRatio)\t\(.route)\t\(.outDir)/review.png
 
 ### Known limits
 
+- The Microlink API takes the screenshots from its own servers, so `--base`/`--head` must be public URLs. It cannot reach `localhost`, a dev server or a page behind a login cookie. For those, take the screenshots locally (any headless browser) and compare them with [Local images in a link](#local-images-in-a-link).
 - Pages of different heights are padded, so every pixel past the shorter page counts as changed. A head page that grew by a long section can fail on height alone; check `review.png` before calling it a regression.
 - The `review` path printed on failure is wrong when `--out` points outside the working directory; take paths from `summary.json`.
 - Very tall pages (tens of thousands of pixels) can exceed the image size limit when building `review.png`, and the run exits `2` with `invalid value (typically too big) for the size of the input`. Diff shorter routes instead.
@@ -192,11 +194,49 @@ https://difftool.microlink.io/?base=<image-url>&head=<image-url>&mode=slider
 
 - URL-encode both image URLs.
 - The browser fetches the images, so the host must send CORS headers (`Access-Control-Allow-Origin`). Public CDNs usually do; S3/R2 buckets only do with a CORS policy (see [Storage](#storage)). If a link shows "Could not load … as an image", missing CORS is the usual cause.
-- Small `data:` URIs work in `base`/`head`, but the whole URL must stay under about 24 KB or the server rejects it (`414`). For real screenshots, use hosted URLs or local files.
+- Small `data:` URIs work in `base`/`head`, but the whole URL must stay under about 24 KB or the server rejects it (`414`). For real screenshots, use hosted URLs or [local images in a link](#local-images-in-a-link).
 
-### Private local images
+### Local images in a link
 
-To compare images from the user's machine without uploading them anywhere, open difftool.microlink.io and drop (or pick) one file on each side. The files are read and diffed entirely in the browser: no network request carries them, and nothing is added to the URL. The trade-off is that there is no shareable link and a reload clears them.
+The page calls `fetch(base)` and `fetch(head)` **from the viewer's browser**, not from a server. So `base` and `head` can be `http://localhost` URLs: the hosted difftool.microlink.io loads images straight from the user's machine, and nothing is uploaded. Do not reach for a bucket, a gist or an image host just because the files are local.
+
+1. Serve the image directory on localhost with these headers. Without CORS the page shows "Could not load … as an image", and `Access-Control-Allow-Private-Network` answers Chrome's preflight for a public site reading a local address:
+
+   ```js
+   // serve-images.mjs: node serve-images.mjs <dir> 4747
+   import http from 'node:http'
+   import fs from 'node:fs'
+   import path from 'node:path'
+   const [root, port] = [path.resolve(process.argv[2]), Number(process.argv[3])]
+   http.createServer((req, res) => {
+     res.setHeader('Access-Control-Allow-Origin', '*')
+     res.setHeader('Access-Control-Allow-Private-Network', 'true')
+     if (req.method === 'OPTIONS') return res.writeHead(204).end()
+     const file = path.join(root, path.normalize(decodeURIComponent(new URL(req.url, 'http://x').pathname)))
+     if (!file.startsWith(root) || !fs.statSync(file, { throwIfNoEntry: false })?.isFile()) return res.writeHead(404).end()
+     res.writeHead(200, { 'Content-Type': 'image/png' })
+     fs.createReadStream(file).pipe(res)
+   }).listen(port, '127.0.0.1')
+   ```
+
+   Run it in the background; the links only work while it runs.
+
+2. Build one link per pair, URL-encoding each image URL:
+
+   ```bash
+   enc() { node -e 'console.log(encodeURIComponent(process.argv[1]))' "$1"; }
+   echo "https://difftool.microlink.io/?base=$(enc http://localhost:4747/base/plans.png)&head=$(enc http://localhost:4747/head/plans.png)&mode=slider"
+   ```
+
+3. Tell the user that on first open Chrome asks to let difftool.microlink.io **access devices on the local network**, and that they must click **Allow**. Blocking it gives the same "Could not load" error as missing CORS.
+
+4. Verify a link before sending it. Headless Chrome cannot show that prompt and denies it, so launch it with the check disabled (with agent-browser: `AGENT_BROWSER_ARGS=--disable-features=LocalNetworkAccessChecks`, in a separate `--session`). Then confirm the page has no "Could not load" text and renders both images.
+
+The links work only on the machine running the server. To share them with someone else, host the images publicly with CORS (see [Storage](#storage)).
+
+### Private local images, no link
+
+To compare two files without any server, open difftool.microlink.io and drop (or pick) one file on each side. The files are read and diffed entirely in the browser: no network request carries them, and nothing is added to the URL. The trade-off is that you get no link and a reload clears them.
 
 To avoid loading the page from the internet at all, run the web app locally from the clone:
 
