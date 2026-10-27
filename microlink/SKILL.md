@@ -432,6 +432,8 @@ The body is JSend. Read the product from `data`. `status` is `success`, `fail`, 
 
 `meta=false` when the caller only wants the asset or `data` fields. A fallback list is numbered: `data.title.0.selector=h1`, `data.title.1.selector=title`. The Pro key is the `x-api-key` header.
 
+The SDK exposes the same layer: `client.request(url, options)` forwards API options as query params, sends `headers` as HTTP request headers and keeps the client context (`apiKey`, `endpoint`) out of the query. It resolves the full body plus `response`, or the raw HTTP response with an `ArrayBuffer` body when `embed` or `stream` is set. `client.apiUrl(url, options)` returns the URL it would call. A keyed client targets `pro.microlink.io` and sends the key as the `x-api-key` header.
+
 ## Embed URLs
 
 Return one field as the response body, for an `img`, CSS background, or Open Graph tag. Do not put an API key in the URL.
