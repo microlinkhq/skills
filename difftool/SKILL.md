@@ -25,7 +25,9 @@ pnpm install
 node packages/cli/bin/cli.js --base https://example.com --head https://preview.example.com
 ```
 
-Set `MICROLINK_API_KEY` for a paid plan. Without it the Microlink free tier applies, which has a small daily request budget: every route costs two screenshots.
+`pnpm install` may print `sharp install: Failed`; the CLI does not need it, ignore it.
+
+Set `MICROLINK_API_KEY` for a paid plan. Without it the Microlink free tier applies, which has a small daily request budget. Every route costs two screenshots, and up to six when the base and head pages have different heights (the CLI retries the pair up to three times before diffing with padding).
 
 ### Options
 
@@ -78,7 +80,8 @@ jq -r '.routes[] | "\(.verdict)\t\(.diffRatio)\t\(.route)\t\(.outDir)/review.png
 ### Known limits
 
 - Pages of different heights are padded, so every pixel past the shorter page counts as changed. A head page that grew by a long section can fail on height alone; check `review.png` before calling it a regression.
-- Very tall pages (tens of thousands of pixels) can exceed the image size limit when building `review.png`, and the run exits `2` with `invalid value (typically too big) for the size of the input`. Diff fewer or shorter routes, or pass a viewport through `--mql`.
+- The `review` path printed on failure is wrong when `--out` points outside the working directory; take paths from `summary.json`.
+- Very tall pages (tens of thousands of pixels) can exceed the image size limit when building `review.png`, and the run exits `2` with `invalid value (typically too big) for the size of the input`. Diff shorter routes instead.
 - Dynamic content (dates, ads, carousels, randomized content) shows up as change. Hide it with `--mql '{"styles":["…{visibility:hidden}"]}'` rather than raising the threshold.
 
 ## GitHub Action
@@ -111,7 +114,9 @@ jobs:
           s3-config: ${{ secrets.S3_CONFIG }}
 ```
 
-Keep `closed` in the trigger types: that run is the cleanup.
+Keep `closed` in the trigger types: that run only deletes the PR's screenshots, it takes no new ones and does not wait for a deployment.
+
+`pull_request` runs from forks get no secrets, so `s3-config` and `microlink-api-key` are empty there and the run fails. Run the workflow only for same-repo branches, or skip forks with `if: github.event.pull_request.head.repo.full_name == github.repository`.
 
 `head: vercel` waits for the Vercel deployment of the PR's head commit and uses its preview URL (`provider-timeout`, default `600` s; `provider-interval`, default `10` s). For any other host, pass the preview URL explicitly.
 
@@ -130,7 +135,20 @@ Screenshots are uploaded to an S3-compatible bucket the user owns (Cloudflare R2
 }
 ```
 
-`accessKeyId`, `secretAccessKey` and `bucket` are required; omit `endpoint` and `forcePathStyle` for AWS S3. The token needs PutObject, GetObject, DeleteObject and ListBucket on that bucket only. Links expire after `presigned-ttl-seconds` (default `86400`); every new run regenerates them.
+`accessKeyId`, `secretAccessKey` and `bucket` are required; omit `endpoint` and `forcePathStyle` for AWS S3. The token needs PutObject, GetObject, DeleteObject and ListBucket on that bucket only.
+
+The comment's **compare** links open the screenshots in the web app, which fetches them from the browser. That only works if the bucket has a CORS policy allowing it; the "open" links work either way. Add this policy to the bucket (R2: bucket settings → CORS policy; S3: Permissions → CORS):
+
+```json
+[
+  {
+    "AllowedOrigins": ["https://difftool.microlink.io"],
+    "AllowedMethods": ["GET"]
+  }
+]
+```
+
+Links expire after `presigned-ttl-seconds` (default `86400`). Each new run on the PR posts fresh ones, but on a PR with no new pushes they stop working once that time passes; raise the TTL for long reviews.
 
 ### Inputs and outputs
 
@@ -141,7 +159,7 @@ Screenshots are uploaded to an S3-compatible bucket the user owns (Cloudflare R2
 | `s3-config` | required | Bucket config JSON (pass a secret) |
 | `routes` | `["/"]` | JSON array string or YAML list string |
 | `threshold` | `0.001` | Pass threshold |
-| `warning-threshold` | `0.05` | Warning threshold (note: the CLI default is `0.02`) |
+| `warning-threshold` | `0.05` | Warning threshold. The CLI default is `0.02`, so set it explicitly to get the same verdicts in both |
 | `pixel-threshold` | `0.1` | Per-pixel sensitivity |
 | `mql` | | Microlink API options JSON |
 | `microlink-api-key` | | Recommended for CI |
@@ -173,7 +191,7 @@ https://difftool.microlink.io/?base=<image-url>&head=<image-url>&mode=slider
 ```
 
 - URL-encode both image URLs.
-- The browser fetches the images, so the host must send CORS headers (`Access-Control-Allow-Origin`). Pre-signed S3/R2 links and most CDNs do; if a link shows "Could not load … as an image", that is the usual cause.
+- The browser fetches the images, so the host must send CORS headers (`Access-Control-Allow-Origin`). Public CDNs usually do; S3/R2 buckets only do with a CORS policy (see [Storage](#storage)). If a link shows "Could not load … as an image", missing CORS is the usual cause.
 - Small `data:` URIs work in `base`/`head`, but the whole URL must stay under about 24 KB or the server rejects it (`414`). For real screenshots, use hosted URLs or local files.
 
 ### Private local images
@@ -192,5 +210,5 @@ pnpm dev # http://localhost:3000
 1. Diff one route first, open its `review.png`, and confirm the screenshots show the intended pages (not a login wall, cookie banner or error page).
 2. Add routes, and hide dynamic regions with `--mql` styles before tuning thresholds.
 3. Tune `--threshold` / `--warning-threshold` from observed `diffRatio` values of known-good runs, not by guessing.
-4. Move the same routes, thresholds and `mql` into the GitHub Action.
+4. Move the same routes, `mql` and both thresholds into the GitHub Action, setting `warning-threshold` explicitly since its default differs from the CLI's.
 5. Hand reviewers the **compare** link (web app, `slider` or `highlight` mode) for anything that warns or fails.
