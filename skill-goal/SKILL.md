@@ -24,13 +24,15 @@ One invocation owns the whole surface. The next invocation is not where the next
 
 ## Start
 
-1. Read both skills in full before the first pass. Resolve each name from the first match: `~/.agents/skills/<name>/SKILL.md`, `~/.cursor/skills/<name>/SKILL.md`, the current repo's `.agents/skills/<name>/SKILL.md`, then `.cursor/skills/<name>/SKILL.md`. The names are `code-review-and-quality` and `code-simplification`. If either is missing, stop and name the paths that were checked.
-2. Call `CreateGoal` once. The objective is the block below with only `<PR>` replaced. Do not add "with a concrete fix", "promotable", or any other qualifier. If creation fails, report that no goal was armed and stop.
+1. Read both skills in full before the first pass. The names are `code-review-and-quality` and `code-simplification`. Load each one through the host's skill tool when it has one. Otherwise resolve each name from the first match: `~/.agents/skills/<name>/SKILL.md`, `~/.claude/skills/<name>/SKILL.md`, `~/.cursor/skills/<name>/SKILL.md`, then the current repo's `.agents/skills/<name>/SKILL.md`, `.claude/skills/<name>/SKILL.md`, and `.cursor/skills/<name>/SKILL.md`. If either is missing, stop and name the paths that were checked.
+2. Arm the objective once. The objective is the block below with only `<PR>` replaced. Do not add "with a concrete fix", "promotable", or any other qualifier.
+   - If the host has a goal tool (Cursor's `CreateGoal`, or its equivalent elsewhere), pass the objective to it. If that call fails, report that no goal was armed and stop.
+   - If the host has no goal tool, print the objective as the first output of the run. It is the goal: the run does not end and does not hand control back until the exit condition holds.
 
 ```text
 On <PR>, run /code-review-and-quality until a fresh pass lists zero findings, then run /code-simplification until a fresh pass lists zero simplifications. If simplification edits the diff, review again. Stop only when a review pass and the simplification pass after it both list nothing.
 
-Pass this objective to CreateGoal unchanged. Do not add "with a concrete fix", "promotable", or any other qualifier.
+Arm this objective unchanged. Do not add "with a concrete fix", "promotable", or any other qualifier.
 
 Inside the review loop the severity table does not authorize skipping. Critical, required, Nit, Optional, Consider, and FYI are all work. Implement each one in the pull request, or run the check it names and record the result.
 
@@ -41,7 +43,7 @@ Before a review pass can list nothing, walk every sibling of every condition the
 After the changes, run the same skill again from the current diff, with no memory of the previous findings. The only exit is a pass whose list is empty after that walk. "Nothing to promote" and "no code change left" are not exits.
 ```
 
-3. Start the review pass in the same turn. Do not stop after creating the goal. Do not simplify while the review list is non-empty.
+3. Start the review pass in the same turn. Do not stop after arming the objective. Do not simplify while the review list is non-empty.
 
 ## One run
 
@@ -87,4 +89,4 @@ Start only after the review loop has exited. A simplification is a change `/code
 
 Simplification can make the last review stale. If this simplify loop edited the diff, go back to the review loop, then simplify again. The sibling walk applies to that review too.
 
-Mark the goal complete only when both are true, in this order: a review pass lists nothing after the sibling walk, and the simplification pass that follows it lists nothing and does not edit the diff.
+Finish only when both are true, in this order: a review pass lists nothing after the sibling walk, and the simplification pass that follows it lists nothing and does not edit the diff. If a goal tool armed the objective, mark that goal complete then, and not before.
