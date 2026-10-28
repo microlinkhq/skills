@@ -77,7 +77,7 @@ Visual regression diffs between two URLs or two images with microlink difftool, 
 
 > `npx -y skills add microlinkhq/skills/skill-goal`
 
-Run `/code-review-and-quality` on a pull request until a fresh pass names no changes, then `/code-simplification` until a fresh pass names nothing to simplify. Use when the user invokes `/skill-goal <PR>`.
+Drives each pull request it is given to an empty code review and an empty simplification: loops `/code-review-and-quality`, testing the edge cases next to every condition the diff adds and mutating each condition, then `/code-simplification`, and pushes every fix to the pull request branch. Several pull requests are reviewed in parallel. Use when the user invokes `/skill-goal` with one or more pull request URLs or `owner/repo#number` references.
 
 ### youtube-dl-exec
 

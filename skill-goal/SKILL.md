@@ -1,33 +1,95 @@
 ---
 name: skill-goal
 description: >-
-  Run /code-review-and-quality on a pull request until one pass has walked
-  every sibling of every new check and then names nothing, then
-  /code-simplification until a fresh pass names nothing to simplify. Use
-  when the user invokes /skill-goal <PR>.
+  Drives each pull request it is given to an empty code review and an empty
+  simplification: loops /code-review-and-quality, testing the edge cases next
+  to every condition the diff adds and mutating each condition, then
+  /code-simplification, and pushes every fix to the pull request branch.
+  Several pull requests are reviewed in parallel. Use when the user invokes
+  /skill-goal with one or more pull request URLs or owner/repo#number
+  references.
 disable-model-invocation: true
 ---
 
 # Skill goal
 
-Two passes, in this order, on one pull request. Review until there is nothing left to change. Then simplify until there is nothing left to simplify. If a simplification edits the diff, review that diff again before stopping.
+Two loops, in this order, on each pull request: review until a pass is empty, then simplify until a pass is empty.
 
 One invocation owns the whole surface. The next invocation is not where the next hole is allowed to appear.
 
 ## Usage
 
 ```text
-/skill-goal <PR>
+/skill-goal <PR> [<PR> ...]
 ```
 
-`<PR>` is a pull request URL, or `owner/repo#number`. If it is missing, stop and show the usage line. Do not guess the pull request.
+Each `<PR>` is a pull request URL, or `owner/repo#number`, separated by spaces or newlines. If none is given, stop and show the usage line. Do not guess a pull request. Drop duplicates, and list anything that is not a pull request as skipped in the batch report.
 
-## Start
+## Batch
 
-1. Read both skills in full before the first pass. The names are `code-review-and-quality` and `code-simplification`. Load each one through the host's skill tool when it has one. Otherwise resolve each name from the first match: `~/.agents/skills/<name>/SKILL.md`, `~/.claude/skills/<name>/SKILL.md`, `~/.cursor/skills/<name>/SKILL.md`, then the current repo's `.agents/skills/<name>/SKILL.md`, `.claude/skills/<name>/SKILL.md`, and `.cursor/skills/<name>/SKILL.md`. If either is missing, stop and name the paths that were checked.
-2. Arm the objective once. The objective is the block below with only `<PR>` replaced. Do not add "with a concrete fix", "promotable", or any other qualifier.
-   - If the host has a goal tool (Cursor's `CreateGoal`, or its equivalent elsewhere), pass the objective to it. If that call fails, report that no goal was armed and stop.
-   - If the host has no goal tool, print the objective as the first output of the run. It is the goal: the run does not end and does not hand control back until the exit condition holds.
+With more than one pull request, each one gets the whole skill on its own: Setup, Objective, both loops, Exit, and its own Report. One pull request never shares a working tree, an objective, or a finding with another.
+
+- Review them in parallel: start one subagent per pull request, all at once. This skill cannot be invoked by a model, so tell each subagent to read this `SKILL.md` in full, by its absolute path, and run it on its one `<PR>`.
+- If the host cannot run subagents, run the pull requests one at a time, in the order given, and say so in the batch report.
+- A BLOCKED pull request does not stop the others.
+- Wait for every subagent to finish, then end with the batch report built from their reports.
+
+## Terms
+
+- **Finding**: anything `/code-review-and-quality` names, at any severity (Critical, required, Nit, Optional, Consider, FYI); a sentence that a test, command, or check was not run; an untested sibling; a mutation that stays green.
+- **Simplification**: a change `/code-simplification` would make.
+- **Pass**: one run of one skill on the diff as it is now. It judges without regard to earlier verdicts or severity labels. The run keeps a log of every pass's findings and fixes, used only to detect oscillation and to write the report. A pass never reads that log.
+- **Empty pass**: a pass that lists nothing. A review pass is empty only after the sibling walk is done for the diff as it is now.
+- **Condition**: a branch, guard, or match the diff adds.
+- **Diff**: the pull request branch against its base branch, including every commit this run has pushed.
+- **BLOCKED**: every stop that is not DONE.
+
+## Progress
+
+Copy this checklist and keep it updated:
+
+```text
+- [ ] Setup: skills loaded, isolated working tree on the pull request branch, push confirmed
+- [ ] Objective armed
+- [ ] Review loop: empty pass reached (passes: N/8, findings fixed: N)
+- [ ] Simplify loop: empty pass reached (passes: N/8, simplifications: N)
+- [ ] Exit: the last review pass and the simplify pass after it are both empty
+- [ ] Report
+```
+
+## Setup
+
+Any failure in Setup is BLOCKED: name the step and paste the error.
+
+1. Read both skills in full: `code-review-and-quality` and `code-simplification`. Load each one through the host's skill tool when it has one. Otherwise resolve each name from the first match: `~/.agents/skills/<name>/SKILL.md`, `~/.claude/skills/<name>/SKILL.md`, `~/.cursor/skills/<name>/SKILL.md`, then the current repo's `.agents/skills/<name>/SKILL.md`, `.claude/skills/<name>/SKILL.md`, and `.cursor/skills/<name>/SKILL.md`. If either is missing, name the paths that were checked.
+2. Read the pull request. It must be open.
+
+   ```bash
+   gh pr view <PR> --json number,state,headRefName,baseRefName,url
+   ```
+
+3. Create an isolated working tree. Never work in the current checkout, so someone else's uncommitted changes are never moved or touched.
+   - If a working tree kept by an earlier BLOCKED run already has the branch `skill-goal/<number>` (`git worktree list`), reuse it: run `git pull --rebase` there, then only the dry run in step 4.
+   - If the current directory is a clone of the pull request's repository (`gh repo view --json nameWithOwner` matches), add a worktree: `git worktree add --detach "$(mktemp -d)/pr-<number>"`.
+   - Otherwise clone it: `gh repo clone <owner>/<repo> "$(mktemp -d)/pr-<number>"`.
+
+   Print the tree's absolute path and run every later command there. Shell state does not survive between tool calls.
+4. Inside that tree, check out the pull request on a local branch of its own name, so a branch already checked out elsewhere does not collide:
+
+   ```bash
+   gh pr checkout <PR> --branch skill-goal/<number>
+   git -c push.default=upstream push --dry-run
+   ```
+
+   The dry run fails when the account cannot write to the pull request branch, fork or not. Every push in this run uses `git -c push.default=upstream push`, which lands on that branch.
+5. Run the project's install step (for example `pnpm install`), so tests can run in the new tree.
+
+## Objective
+
+Arm the objective once, immediately after Setup and before the first pass: the block below with only `<PR>` replaced.
+
+- If the host has a goal tool (Cursor's `CreateGoal`, or its equivalent elsewhere), pass the objective to it. If that call fails, report that no goal was armed and stop.
+- If the host has no goal tool, print the objective. It is the goal: the run does not end and does not hand control back until Exit.
 
 ```text
 On <PR>, run /code-review-and-quality until a fresh pass lists zero findings, then run /code-simplification until a fresh pass lists zero simplifications. If simplification edits the diff, review again. Stop only when a review pass and the simplification pass after it both list nothing.
@@ -43,50 +105,86 @@ Before a review pass can list nothing, walk every sibling of every condition the
 After the changes, run the same skill again from the current diff, with no memory of the previous findings. The only exit is a pass whose list is empty after that walk. "Nothing to promote" and "no code change left" are not exits.
 ```
 
-3. Start the review pass in the same turn. Do not stop after arming the objective. Do not simplify while the review list is non-empty.
+Start the first review pass in the same turn.
 
-## One run
+## Sibling walk
 
-A later run of this skill found the next hole because the previous run fixed the one it noticed and stopped. That split is the failure this section exists to prevent.
-
-Before a review pass can list nothing, do this walk in the same run. Write the siblings down. An untested sibling is a finding.
-
-For every condition the diff adds, name:
+Part of every review pass. Write the siblings down. For every condition, name:
 
 - **The other branch.** The catch next to the success path. The host check next to the gateway check. If one path decides an outcome, the other path that reports the same outcome is part of this pass.
-- **The other input the platform treats the same way.** A missing header, a byte-order mark in front of the bytes the check reads, a type the browser still executes. If the check sniffs or matches a string, the shapes that still reach that code are part of this pass.
+- **The other input the platform treats the same way.** A missing header, a byte-order mark in front of the bytes the condition reads, a type the browser still executes. If the condition sniffs or matches a string, the shapes that still reach that code are part of this pass.
 - **The other call that does the same thing.** `window.open` and a click. `location` and `document.location`. If one caller is guarded, the other caller is part of this pass.
 
-Run each sibling now. When it fails, fix it before this pass ends. When it does not fail, record the result and do not add a branch for it. A check whose test stays green after the check is removed does not lock the line: delete the check, or write the test that fails, in this pass.
+Run each sibling. When it fails, it is a finding. When it holds, record the result and do not add a branch for it.
 
-Mutate every condition this diff adds, in this pass. Invert it, run the test that should catch it, and restore the file. One mutation is not the walk. A mutation that stays green is a finding: the test does not lock that line.
-
-These are not exits: an empty list that skipped the walk, fixing one hole and declaring the rest for later, or completing the goal while a sibling is still untested.
+Then mutate every condition. Before each mutation, commit pending fixes so `git status --porcelain` prints nothing. Invert the condition, run the test that should catch it, and restore with `git restore --source=HEAD --staged --worktree <file>`. Never commit a mutation. A mutation that stays green is a finding: the test does not lock that line. Its fix is to delete the condition or write the test that fails.
 
 ## Review loop
 
-A review finding is anything `/code-review-and-quality` names: Critical, required, Nit, Optional, Consider, FYI, a sentence that a test, command, or check was not run, or an untested sibling from the walk above.
+1. Run a review pass, sibling walk included.
+2. Do every finding: change the code on the pull request branch, or run the named check and record the result.
+3. Land the changes:
+   - Run the test files the diff changes and the tests that import the changed modules. If unsure which, run the package's full test command. A failing test is a finding: fix it before committing.
+   - Stage by path, never `git add -A`. Commit with a message that names what the pass found.
+   - Push. Never force-push. If the push is rejected as non-fast-forward, run `git pull --rebase`, run the tests again, and push. A rebase conflict is BLOCKED.
+4. Run a new review pass. If it is not empty, go back to step 2.
 
-1. Run `/code-review-and-quality` on the current diff. Include the sibling walk in that pass, before the list can be empty.
-2. Do every finding. Land the change on the pull request, or run the named check and record the result.
-3. Run `/code-review-and-quality` again on the diff as it is now. Forget that earlier items were labeled optional. Walk the siblings of any condition the fixes added.
-4. If that pass names anything, go back to step 2.
-5. Leave this loop only when the pass names nothing and the sibling walk for the diff as it is now is done.
-
-These are not exits: "nothing to promote", "no code change left", relabeling an open item as FYI, treating Nit, Optional, Consider, or FYI as skippable, or stopping after the first hole.
+Do not start the simplify loop while the last review pass has findings.
 
 ## Simplify loop
 
-Start only after the review loop has exited. A simplification is a change `/code-simplification` would make. A pass that correctly says the code is already clean lists zero. Do not invent one. Follow that skill's own limits: preserve behavior, stay on the pull request diff, and do not make a change its "do not" section rejects.
+A pass that correctly says the code is already clean is empty. Do not invent a simplification. Follow that skill's own limits: preserve behavior, stay on the diff, and do not make a change its "do not" section rejects.
 
-1. Run `/code-simplification` on the current diff.
-2. Apply every simplification it names. Tests stay green without being rewritten to fit a behavior change.
-3. Run `/code-simplification` again on the diff as it is now.
-4. If that pass names a simplification, go back to step 2.
-5. Leave this loop only when the pass names nothing.
+1. Run a simplification pass.
+2. Apply every simplification. Tests stay green without being rewritten to fit a behavior change.
+3. Land the changes, as in the review loop.
+4. Run a new simplification pass. If it is not empty, go back to step 2.
 
 ## Exit
 
-Simplification can make the last review stale. If this simplify loop edited the diff, go back to the review loop, then simplify again. The sibling walk applies to that review too.
+DONE only when both are true, in this order: a review pass is empty, and the simplification pass after it is empty. If any simplification landed since the last empty review pass, go back to the review loop. If a goal tool armed the objective, mark that goal complete then, and not before. On BLOCKED, close or fail the goal with the reason, so it does not keep the run going.
 
-Finish only when both are true, in this order: a review pass lists nothing after the sibling walk, and the simplification pass that follows it lists nothing and does not edit the diff. If a goal tool armed the objective, mark that goal complete then, and not before.
+The objective block lists what is not an exit. Stop as BLOCKED when:
+
+- Setup fails, or the goal tool fails.
+- A check cannot be run. Name the exact missing input.
+- A push, tool call, or permission is denied, for example `gh` is not authenticated or a headless run cannot push. Paste the denial.
+- The loops oscillate: a finding or simplification undoes a change an earlier pass in this run made for a different reason, or the same finding returns after it was fixed. Name both passes and both changes. Do not pick one side and keep looping.
+- The review loop or the simplify loop reaches 8 passes in total across the whole run, re-entries included. List every open finding.
+
+When the run ends DONE, remove the working tree (`git worktree remove`, or delete the clone) and delete the local branch `skill-goal/<number>`. On BLOCKED after Setup, keep both and put the tree's path in the report; the next run reuses them.
+
+## Report
+
+End each pull request with this:
+
+```markdown
+## skill-goal: <PR>
+
+**Status:** DONE | BLOCKED
+
+| Loop | Passes | Fixed | Last pass |
+| --- | --- | --- | --- |
+| Review | N | N findings | empty \| N open |
+| Simplify | N | N simplifications | empty \| N open |
+
+**Commits pushed:** <short sha> <subject>, one per line
+**Siblings walked:** <condition> → <sibling>: <result>, one per line
+**Mutations:** <condition>: caught by <test> | finding, one per line
+**Blocked on:** <the BLOCKED case and its evidence> (BLOCKED only)
+**Open findings:** <finding>, one per line (BLOCKED only)
+**Working tree:** <path> (BLOCKED after Setup only)
+```
+
+With more than one pull request, end the run with the batch report, and nothing after it:
+
+```markdown
+## skill-goal batch
+
+| Pull request | Status | Review passes | Simplify passes | Commits pushed |
+| --- | --- | --- | --- | --- |
+| <PR> | DONE \| BLOCKED: <reason> | N | N | N |
+
+**Mode:** parallel | sequential (host has no subagents)
+**Skipped:** <input that is not a pull request>, one per line
+```
