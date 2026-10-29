@@ -1,17 +1,17 @@
 ---
-name: skill-goal
+name: review
 description: >-
   Drives each pull request it is given to an empty code review and an empty
   simplification: loops /code-review-and-quality, testing the edge cases next
   to every condition the diff adds and mutating each condition, then
   /code-simplification, and pushes every fix to the pull request branch.
   Several pull requests are reviewed in parallel. Use when the user invokes
-  /skill-goal with one or more pull request URLs or owner/repo#number
+  /review with one or more pull request URLs or owner/repo#number
   references.
 disable-model-invocation: true
 ---
 
-# Skill goal
+# Review
 
 Two loops, in this order, on each pull request: review until a pass is empty, then simplify until a pass is empty.
 
@@ -20,7 +20,7 @@ One invocation owns the whole surface. The next invocation is not where the next
 ## Usage
 
 ```text
-/skill-goal <PR> [<PR> ...]
+/review <PR> [<PR> ...]
 ```
 
 Each `<PR>` is a pull request URL, or `owner/repo#number`, separated by spaces or newlines. If none is given, stop and show the usage line. Do not guess a pull request. Drop duplicates, and list anything that is not a pull request as skipped in the batch report.
@@ -61,23 +61,23 @@ Copy this checklist and keep it updated:
 
 Any failure in Setup is BLOCKED: name the step and paste the error.
 
-1. Read both skills in full: `code-review-and-quality` and `code-simplification`. Load each one through the host's skill tool when it has one. Otherwise resolve each name from the first match: `~/.agents/skills/<name>/SKILL.md`, `~/.claude/skills/<name>/SKILL.md`, `~/.cursor/skills/<name>/SKILL.md`, then the current repo's `.agents/skills/<name>/SKILL.md`, `.claude/skills/<name>/SKILL.md`, and `.cursor/skills/<name>/SKILL.md`. If either is missing, name the paths that were checked.
+1. Read both skills in full: `code-review-and-quality` and `code-simplification`. Load each one through the host's skill tool when it has one and the tool finds it. When there is no skill tool, or it does not find the skill, resolve the name from the first match on disk: `~/.agents/skills/<name>/SKILL.md`, `~/.claude/skills/<name>/SKILL.md`, `~/.cursor/skills/<name>/SKILL.md`, then the current repo's `.agents/skills/<name>/SKILL.md`, `.claude/skills/<name>/SKILL.md`, and `.cursor/skills/<name>/SKILL.md`. If either is missing, name the paths that were checked.
 2. Read the pull request. It must be open.
 
    ```bash
    gh pr view <PR> --json number,state,headRefName,baseRefName,url
    ```
 
-3. Create an isolated working tree. Never work in the current checkout, so someone else's uncommitted changes are never moved or touched.
-   - If a working tree kept by an earlier BLOCKED run already has the branch `skill-goal/<number>` (`git worktree list`), reuse it: run `git pull --rebase` there, then only the dry run in step 4.
-   - If the current directory is a clone of the pull request's repository (`gh repo view --json nameWithOwner` matches), add a worktree: `git worktree add --detach "$(mktemp -d)/pr-<number>"`.
-   - Otherwise clone it: `gh repo clone <owner>/<repo> "$(mktemp -d)/pr-<number>"`.
+3. Create an isolated working tree at a fixed path, so a later run finds it: `${TMPDIR:-/tmp}/review/<owner>/<repo>/<number>`. Never work in the current checkout, so someone else's uncommitted changes are never moved or touched.
+   - If that path exists, an earlier BLOCKED run kept it. Reuse it: if `git status --porcelain` prints anything or a rebase is in progress, stop as BLOCKED with the path. Otherwise run `git pull --rebase` there, then only the dry run in step 4.
+   - If the current directory is a clone of the pull request's repository (`gh repo view --json nameWithOwner` matches), add a worktree: `git worktree add --detach <path>`.
+   - Otherwise clone it: `gh repo clone <owner>/<repo> <path>`.
 
-   Print the tree's absolute path and run every later command there. Shell state does not survive between tool calls.
+   Run every later command in that path. Shell state does not survive between tool calls.
 4. Inside that tree, check out the pull request on a local branch of its own name, so a branch already checked out elsewhere does not collide:
 
    ```bash
-   gh pr checkout <PR> --branch skill-goal/<number>
+   gh pr checkout <PR> --branch review/<number>
    git -c push.default=upstream push --dry-run
    ```
 
@@ -152,14 +152,14 @@ The objective block lists what is not an exit. Stop as BLOCKED when:
 - The loops oscillate: a finding or simplification undoes a change an earlier pass in this run made for a different reason, or the same finding returns after it was fixed. Name both passes and both changes. Do not pick one side and keep looping.
 - The review loop or the simplify loop reaches 8 passes in total across the whole run, re-entries included. List every open finding.
 
-When the run ends DONE, remove the working tree (`git worktree remove`, or delete the clone) and delete the local branch `skill-goal/<number>`. On BLOCKED after Setup, keep both and put the tree's path in the report; the next run reuses them.
+When the run ends DONE, remove the working tree (`git worktree remove`, or delete the clone) and delete the local branch `review/<number>`. On BLOCKED after Setup, first leave the tree clean so the next run can reuse it: restore any active mutation, run `git rebase --abort` if a rebase is in progress, and commit pending fixes locally without pushing. Then keep the tree and the branch, and put the path in the report.
 
 ## Report
 
 End each pull request with this:
 
 ```markdown
-## skill-goal: <PR>
+## review: <PR>
 
 **Status:** DONE | BLOCKED
 
@@ -179,7 +179,7 @@ End each pull request with this:
 With more than one pull request, end the run with the batch report, and nothing after it:
 
 ```markdown
-## skill-goal batch
+## review batch
 
 | Pull request | Status | Review passes | Simplify passes | Commits pushed |
 | --- | --- | --- | --- | --- |

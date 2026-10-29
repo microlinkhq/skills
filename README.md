@@ -73,11 +73,11 @@ Execute a remote agent skill from a skills.sh or GitHub URL without installing i
 
 Visual regression diffs between two URLs or two images with microlink difftool, via its CLI, its GitHub Action (sticky PR comment with screenshots), or the web app at difftool.microlink.io. Use when the user mentions difftool, visual diff, visual regression, comparing a preview deploy against production, screenshot diffs on pull requests, or comparing two images side by side, including private local images.
 
-### skill-goal
+### review
 
-> `npx -y skills add microlinkhq/skills/skill-goal`
+> `npx -y skills add microlinkhq/skills/review`
 
-Drives each pull request it is given to an empty code review and an empty simplification: loops `/code-review-and-quality`, testing the edge cases next to every condition the diff adds and mutating each condition, then `/code-simplification`, and pushes every fix to the pull request branch. Several pull requests are reviewed in parallel. Use when the user invokes `/skill-goal` with one or more pull request URLs or `owner/repo#number` references.
+Drives each pull request it is given to an empty code review and an empty simplification: loops `/code-review-and-quality`, testing the edge cases next to every condition the diff adds and mutating each condition, then `/code-simplification`, and pushes every fix to the pull request branch. Several pull requests are reviewed in parallel. Use when the user invokes `/review` with one or more pull request URLs or `owner/repo#number` references.
 
 ### youtube-dl-exec
 
