@@ -2,9 +2,11 @@
 name: loop-review
 description: >-
   Drives each pull request it is given to an empty code review and an empty
-  simplification: loops /code-review-and-quality, testing the edge cases next
-  to every condition the diff adds and mutating each condition, then
-  /code-simplification, and pushes every fix to the pull request branch.
+  simplification: loops /code-review-and-quality, testing every sibling of
+  every condition the diff adds. The sibling list is the names that statement
+  contains, including a name it leaves allowed. It is not every type or
+  spelling that could be written in its place. Mutate each condition, then
+  /code-simplification, and push every fix to the pull request branch.
   Several pull requests are reviewed in parallel. Use when the user invokes
   /loop-review with one or more pull request URLs or owner/repo#number
   references.
@@ -15,7 +17,7 @@ disable-model-invocation: true
 
 Two loops, in this order, on each pull request: review until a pass is empty, then simplify until a pass is empty.
 
-One invocation owns the whole surface. The next invocation is not where the next hole is allowed to appear.
+One invocation owns the whole surface. Finish every sibling of every condition in this run. The next invocation is not where a name on this run's list is allowed to appear. A type or spelling the statement does not contain is not on that list.
 
 ## Usage
 
@@ -37,10 +39,10 @@ With more than one pull request, each one gets the whole skill on its own: Setup
 
 ## Terms
 
-- **Finding**: anything `/code-review-and-quality` names, at any severity (Critical, required, Nit, Optional, Consider, FYI); a sentence that a test, command, or check was not run; an untested sibling; a mutation that stays green.
+- **Finding**: anything `/code-review-and-quality` names, at any severity (Critical, required, Nit, Optional, Consider, FYI); a sentence that a test, command, or check was not run; an untested sibling; a sibling that failed, including one set aside as unrealistic, private, a known limit, or out of scope; a mutation that stays green for a name on the sibling list, including a ban of a name the condition leaves allowed. A green mutation that adds a type or spelling the statement does not name is not a finding.
 - **Simplification**: a change `/code-simplification` would make.
 - **Pass**: one run of one skill on the diff as it is now. It judges without regard to earlier verdicts or severity labels. The run keeps a log of every pass's findings and fixes, used only to detect oscillation and to write the report. A pass never reads that log.
-- **Empty pass**: a pass that lists nothing. A review pass is empty only after the sibling walk is done for the diff as it is now.
+- **Empty pass**: a pass that lists nothing. A review pass is empty only after every sibling of the diff as it is now has been run. A sibling left unrun, or run and then set aside, means the pass is not empty.
 - **Condition**: a branch, guard, or match the diff adds.
 - **Diff**: the pull request branch against its base branch, including every commit this run has pushed.
 - **BLOCKED**: every stop that is not DONE.
@@ -101,7 +103,7 @@ Inside the review loop the severity table does not authorize skipping. Critical,
 
 A sentence that something was not run is an open finding. Run it. If it cannot be run, stop as BLOCKED and name the exact missing input. Do not relabel that sentence FYI and exit.
 
-Before a review pass can list nothing, walk every sibling of every condition the diff adds, in this same run. A sibling is the other branch of the same decision, the other input the platform treats the same way, and the other call that does the same thing. Test each one now. Mutate every new condition in this pass. An empty list that skipped that walk is not an exit. Finding one hole and stopping is not an exit.
+Before a review pass can list nothing, walk every sibling of every condition the diff adds, in this same run. A sibling is the other branch of the same decision, the other input the platform treats the same way, and the other call that does the same thing. When a condition names some of the keys, methods, headers, or strings one statement copies, matches, or calls, every other name that statement writes, reads, or accepts is a sibling, private names included, and so is every name that statement leaves allowed. Write that whole list from the statement before fixing any name. The list is only those names. A type annotation is one name: `boolean` does not name `number`, `null`, `object`, `bigint`, `symbol`, an array, a function, or `void`. Finish every name on the list in this run. Fixing the first name on that list and ending is how the next run finds the rest of that list. A type or spelling the statement does not contain is not a missed name. Test each name on the list now. A sibling on the list that you did not run, or that you ran and that failed, stays a finding. "Unrealistic", "a user would not pass that", "known limit", "private", and "not this pull request's shape" are not exits. Leave a failed sibling unfixed only when every fix also rejects the valid branch, and show that. A name on the list that is left allowed is the other branch: add it to the exclusion and run the tests. Green means the allow is unlocked. Write the test that fails when that name is banned. "It is valid, so leave it allowed" is not an exit. A runtime success does not lock a type on the list. A green mutation that only adds a type or spelling the statement does not name is not a finding: do not add a test, an error-text snapshot, or a compiler flag for it. Mutate every new condition in this pass. An empty list that skipped that walk is not an exit. Finding one hole on the list and stopping is not an exit.
 
 After the changes, run the same skill again from the current diff, with no memory of the previous findings. The only exit is a pass whose list is empty after that walk. "Nothing to promote" and "no code change left" are not exits.
 ```
@@ -116,9 +118,21 @@ Part of every review pass. Write the siblings down. For every condition, name:
 - **The other input the platform treats the same way.** A missing header, a byte-order mark in front of the bytes the condition reads, a type the browser still executes. If the condition sniffs or matches a string, the shapes that still reach that code are part of this pass.
 - **The other call that does the same thing.** `window.open` and a click. `location` and `document.location`. If one caller is guarded, the other caller is part of this pass.
 
-Run each sibling. When it fails, it is a finding. When it holds, record the result and do not add a branch for it.
+Run each sibling. When it fails, it is a finding. When it holds, record the command that passed and do not add a branch for it.
 
-Then mutate every condition. Before each mutation, commit pending fixes so `git status --porcelain` prints nothing. Invert the condition, run the test that should catch it, and restore with `git restore --source=HEAD --staged --worktree <file>`. Never commit a mutation. A mutation that stays green is a finding: the test does not lock that line. Its fix is to delete the condition or write the test that fails.
+The walk is the whole set the condition's statement touches, not the names the diff already wrote down. A list of keys, methods, headers, or strings stands for every name that same copy, match, or call writes, reads, or accepts. Read the statement and write those names down before changing code. The fields it copies, the methods on the value it writes onto, and the properties that type declares are the list. The names the diff already excludes are not the list. One of those names that is missing from your list means this pass is not empty. If the condition excludes `get` and `set` because a copy replaces them, every other method that copy replaces is a sibling, including a private one, and every name that same copy still writes is a sibling too.
+
+A type annotation contributes its own name, not the universe of types. `boolean` is one name. Its allows are the values the statement already distinguishes, such as `true` and `false`, plus omission when the property is optional. One rejection of a value outside that type is enough when the suite already has one. `number`, `null`, `string`, `object`, `bigint`, `symbol`, an array, a function, and `void` are not siblings of `boolean` unless the statement or a caller in the diff already passes that value. Do not union one in to see if the suite stays green.
+
+Two spellings that accept the same programs are one name. Replacing `Promise<unknown>` with `Promise<any>` is not a finding when the suite still typechecks. Do not snapshot the compiler's error text, export the constraint, turn on a flag the project does not already use, or flip the spelling. An optional property already allows omission. Explicit `undefined` is that same allow unless the project already compiles with `exactOptionalPropertyTypes`. Do not add `| undefined` and do not add a probe whose only job is to lock that flag.
+
+A name the condition does not exclude, and that is on the list, is the other branch, the allow. Mutate the allow by adding that name to the exclusion and running the tests. Red means a valid input already uses the name: leave it allowed. Green means the allow is unlocked. That green is a finding even when the name is a real option, and even when a runtime command still succeeds. The fix is a test that passes a value using that name, so the same ban goes red. A comment that the name stays allowed is not the test. "It is valid, so do not exclude it" and "the suite stays green because no test passes it" are not exits. When the exclusion is `get` and `set`, and the same copy writes `serialize`, `deserialize`, and `ttl`, those three are this case: ban each one, and a green result means add the test that uses it. Finish every name on the list in this pass. Fixing the first name on that list and ending is how the next run finds the rest of that list. A later run that only names a type or spelling the statement does not contain must not change the diff.
+
+Do not set a sibling aside. "Unrealistic", "a user would not pass that", "known limit", "private", "not the shape this pull request is about", and "out of scope" are not reasons. A sibling you can fix inside this diff, without also rejecting the valid branch, is fixed in this run. The only failed sibling that stays unfixed is one where every fix rejects the valid branch too: show that, and do not add the broken check.
+
+"Holds" means the command passed. A sibling you did not run does not hold. A sibling that failed does not hold because you can explain it. A hold for an allow on the list is the test going red when that name is banned. A runtime command that the behavior still works does not lock a name on the list, and it does not substitute for that mutation. A green result for a type or spelling the statement does not name needs no test.
+
+Then mutate every condition. Before each mutation, commit pending fixes so `git status --porcelain` prints nothing. Invert the condition, run the test that should catch it, and restore with `git restore --source=HEAD --staged --worktree <file>`. Never commit a mutation. A mutation that stays green for a name on the list is a finding: the test does not lock that name. Its fix is to delete the condition or write the test that fails. A sentence is not a fix. Keeping an allow, and saying why, is neither fix. Do that write or delete in this pass, for every green mutation of a name on the list, before the pass can be empty. A mutation that stays green because it adds a type or spelling the statement does not name is not on that list. Record the command and do not add a test.
 
 ## Review loop
 
@@ -143,7 +157,7 @@ A pass that correctly says the code is already clean is empty. Do not invent a s
 
 ## Exit
 
-DONE only when both are true, in this order: a review pass is empty, and the simplification pass after it is empty. If any simplification landed since the last empty review pass, go back to the review loop. If a goal tool armed the objective, mark that goal complete then, and not before. On BLOCKED, close or fail the goal with the reason, so it does not keep the run going.
+DONE only when both are true, in this order: a review pass is empty, and the simplification pass after it is empty. DONE is false when any sibling of a condition this run walked is unnamed, unrun, or set aside. DONE is false when any name on the list is missing, or is left allowed without a test that goes red when that name is banned. The list is the names the statement contains, including the names it leaves allowed. A type annotation is one name. Finish that list in this run. A later run finding a name that was on the list means this run stopped early. A later run that only names a type or spelling the statement does not contain must not change the diff, and it is not evidence this run stopped early. If any simplification landed since the last empty review pass, go back to the review loop. If a goal tool armed the objective, mark that goal complete then, and not before. On BLOCKED, close or fail the goal with the reason, so it does not keep the run going.
 
 The objective block lists what is not an exit. Stop as BLOCKED when:
 
@@ -170,7 +184,7 @@ End each pull request with this:
 | Simplify | N | N simplifications | empty \| N open |
 
 **Commits pushed:** <short sha> <subject>, one per line
-**Siblings walked:** <condition> → <sibling>: <result>, one per line
+**Siblings walked:** <condition> → <sibling>: hold (<command that passed>) | finding, one per line. Every name on the list is a line, including a name the condition leaves allowed. A type or spelling the statement does not name is not a line. A line with no command is an open finding. An allowed name on the list whose ban stays green is an open finding. A green mutation that only adds a type or spelling the statement does not name is not an open finding.
 **Mutations:** <condition>: caught by <test> | finding, one per line
 **Blocked on:** <the BLOCKED case and its evidence> (BLOCKED only)
 **Open findings:** <finding>, one per line (BLOCKED only)

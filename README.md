@@ -77,7 +77,7 @@ Visual regression diffs between two URLs or two images with microlink difftool, 
 
 > `npx -y skills add microlinkhq/skills/loop-review`
 
-Drives each pull request it is given to an empty code review and an empty simplification: loops `/code-review-and-quality`, testing the edge cases next to every condition the diff adds and mutating each condition, then `/code-simplification`, and pushes every fix to the pull request branch. Several pull requests are reviewed in parallel. Use when the user invokes `/loop-review` with one or more pull request URLs or `owner/repo#number` references.
+Drives each pull request it is given to an empty code review and an empty simplification: loops `/code-review-and-quality`, testing every sibling of every condition the diff adds. The sibling list is the names that statement contains, including a name it leaves allowed. It is not every type or spelling that could be written in its place. Mutate each condition, then `/code-simplification`, and push every fix to the pull request branch. Several pull requests are reviewed in parallel. Use when the user invokes `/loop-review` with one or more pull request URLs or `owner/repo#number` references.
 
 ### youtube-dl-exec
 
