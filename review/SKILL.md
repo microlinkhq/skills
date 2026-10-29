@@ -66,11 +66,11 @@ Any failure in Setup is BLOCKED: name the step and paste the error.
 2. Read the pull request. It must be open.
 
    ```bash
-   gh pr view <PR> --json number,state,headRefName,baseRefName,url
+   gh pr view <PR> --json number,state,headRefName,headRepository,headRepositoryOwner,baseRefName,url
    ```
 
 3. Create an isolated working tree at a fixed path, so a later run finds it: `${TMPDIR:-/tmp}/review/<owner>/<repo>/<number>`. Never work in the current checkout, so someone else's uncommitted changes are never moved or touched.
-   - If that path exists, an earlier BLOCKED run kept it. Reuse it only when it is on the branch `review/<number>` and its upstream (`git rev-parse --abbrev-ref @{upstream}`) is `<remote>/<headRefName>`, so a push can never land on another branch. Stop as BLOCKED with the path when it is not, when `git status --porcelain` prints anything, or when a rebase is in progress. Otherwise run `git pull --rebase` there, then only the dry run in step 4.
+   - If that path exists, an earlier BLOCKED run kept it. Reuse it only when it is on the branch `review/<number>` and that branch still targets the pull request head, so a push can never land on another branch: `git config branch.review/<number>.merge` is `refs/heads/<headRefName>`, and `git config branch.review/<number>.remote` is, or names a remote whose `git remote get-url` is, a URL of `<headRepositoryOwner>/<headRepository>`. For a fork, `gh pr checkout` stores that URL directly instead of a remote name. Stop as BLOCKED with the path when it is not, when `git status --porcelain` prints anything, or when a rebase is in progress. Otherwise run `git pull --rebase` there, then only the dry run in step 4.
    - If the current directory is a clone of the pull request's repository (`gh repo view --json nameWithOwner` matches), add a worktree: `git worktree add --detach <path>`.
    - Otherwise clone it: `gh repo clone <owner>/<repo> <path>`.
 
