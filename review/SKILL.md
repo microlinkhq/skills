@@ -23,15 +23,16 @@ One invocation owns the whole surface. The next invocation is not where the next
 /review <PR> [<PR> ...]
 ```
 
-Each `<PR>` is a pull request URL, or `owner/repo#number`, separated by spaces or newlines. If none is given, stop and show the usage line. Do not guess a pull request. Drop duplicates, and list anything that is not a pull request as skipped in the batch report.
+Each `<PR>` is a pull request URL, or `owner/repo#number`, separated by spaces or newlines. If none is given, stop and show the usage line. Do not guess a pull request. Normalize each one to its URL, `https://github.com/<owner>/<repo>/pull/<number>`, before anything else: `gh` does not accept `owner/repo#number`. Every later `<PR>` is that URL. Drop duplicates, and list anything that is not a pull request as skipped in the batch report.
 
 ## Batch
 
 With more than one pull request, each one gets the whole skill on its own: Setup, Objective, both loops, Exit, and its own Report. One pull request never shares a working tree, an objective, or a finding with another.
 
-- Review them in parallel: start one subagent per pull request, all at once. This skill cannot be invoked by a model, so tell each subagent to read this `SKILL.md` in full, by its absolute path, and run it on its one `<PR>`.
+- Review them in parallel: one subagent per pull request, at most 4 running at once. Start the next as soon as one finishes. This skill cannot be invoked by a model, so tell each subagent to read this `SKILL.md` in full, by its absolute path, and run it on its one `<PR>`.
 - If the host cannot run subagents, run the pull requests one at a time, in the order given, and say so in the batch report.
 - A BLOCKED pull request does not stop the others.
+- A subagent that fails, or ends without its report, is BLOCKED: no report. Put its working tree path in the batch report.
 - Wait for every subagent to finish, then end with the batch report built from their reports.
 
 ## Terms
@@ -61,7 +62,7 @@ Copy this checklist and keep it updated:
 
 Any failure in Setup is BLOCKED: name the step and paste the error.
 
-1. Read both skills in full: `code-review-and-quality` and `code-simplification`. Load each one through the host's skill tool when it has one and the tool finds it. When there is no skill tool, or it does not find the skill, resolve the name from the first match on disk: `~/.agents/skills/<name>/SKILL.md`, `~/.claude/skills/<name>/SKILL.md`, `~/.cursor/skills/<name>/SKILL.md`, then the current repo's `.agents/skills/<name>/SKILL.md`, `.claude/skills/<name>/SKILL.md`, and `.cursor/skills/<name>/SKILL.md`. If either is missing, name the paths that were checked.
+1. Read both skills in full: `code-review-and-quality` and `code-simplification`. Load each one through the host's skill tool when it has one and the tool finds it. When there is no skill tool, or it does not find the skill, resolve the name from the first match on disk: `~/.agents/skills/<name>/SKILL.md`, `~/.claude/skills/<name>/SKILL.md`, then `~/.cursor/skills/<name>/SKILL.md`. Never load them from a repository, which a pull request can change. If either is missing, name the paths that were checked.
 2. Read the pull request. It must be open.
 
    ```bash
