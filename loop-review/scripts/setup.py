@@ -230,6 +230,11 @@ def package_manager(tree, siblings):
     return 'npm'
 
 
+def install_env():
+    """CI makes pnpm install with --frozen-lockfile, which fails in a repository without a lockfile."""
+    return {name: value for name, value in os.environ.items() if name != 'CI'}
+
+
 def install(tree, logs):
     if not os.path.isfile(os.path.join(tree, 'package.json')):
         return 'none (no package.json)'
@@ -254,8 +259,8 @@ def install(tree, logs):
     manager = package_manager(tree, siblings)
     log = os.path.join(logs, 'install.log')
     with open(log, 'w') as out:
-        code = subprocess.run([manager, 'install'], cwd=tree, stdout=out, stderr=subprocess.STDOUT,
-                              env={**os.environ, 'CI': '1'}).returncode
+        code = subprocess.run([manager, 'install'], cwd=tree, stdin=subprocess.DEVNULL, stdout=out,
+                              stderr=subprocess.STDOUT, env=install_env()).returncode
     if code != 0:
         with open(log) as file:
             raise Blocked(f'`{manager} install` exited {code}, log {log}', '\n'.join(file.read().splitlines()[-LOG_TAIL_LINES:]))

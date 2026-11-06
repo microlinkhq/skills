@@ -31,6 +31,8 @@ esac
 const FAKE_PNPM = `#!/usr/bin/env bash
 echo "$PWD" >> "$FAKE_PNPM_LOG"
 [ -n "\${FAKE_PNPM_FAIL:-}" ] && { echo "ERR_PNPM boom"; exit 1; }
+[ -n "\${CI:-}" ] && [ ! -f pnpm-lock.yaml ] && { echo "ERR_PNPM_NO_LOCKFILE"; exit 1; }
+[ -t 0 ] && { echo "stdin is a terminal"; exit 1; }
 mkdir -p node_modules && echo pnpm > node_modules/.modules.yaml
 `
 
@@ -173,6 +175,14 @@ test('a review tree that diverged from the remote stops with the pull to run', t
   const out = f.setup()
   assert.equal(out.STATUS, 'blocked')
   assert.match(out.REASON, /diverged: run `git pull --rebase origin feat` there/)
+})
+
+test('a lockfile-free pnpm repository installs, even when the agent runs with CI set', t => {
+  const f = repositoryWithFeatureBranch()
+  f.git(f.work, 'git switch -q feat')
+  const out = f.setup(f.work, { CI: '1' })
+  assert.equal(out.STATUS, 'ready', out.stdout)
+  assert.equal(out.INSTALL, 'pnpm install')
 })
 
 test('a dependency change installs again', t => {
