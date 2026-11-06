@@ -14,13 +14,16 @@ The tree is, in order of preference:
   2. a worktree of a local clone that has the head branch checked out (the tree the
      feature was written in), when its tracked files are clean and it has no commits
      the remote lacks. It is fast-forwarded and used in place, and never switched;
-  3. a new review tree, branch loop-review/<number> from the remote head, added to
-     the clone the current directory belongs to, or to one cached clone of the
-     repository when it does not belong to one.
+  3. a new review tree, branch loop-review/<number> from the remote head.
+
+The clone used is the one the current directory belongs to; otherwise a clone
+found under LOOP_REVIEW_ROOTS (default: the home directory, 3 levels deep),
+preferring one with a worktree on the head branch; otherwise one cached clone.
 
 Trees are never deleted, so the next run is a fetch. Dependencies are installed
-only when a package.json or lockfile changed since the last install in that tree; a
-new tree first clones node_modules from a sibling worktree.
+only when a package.json or lockfile changed since the last install in that tree (a
+node_modules installed after the last manifest change counts as current); a new tree
+first clones node_modules from a sibling worktree.
 """
 
 import contextlib
@@ -45,6 +48,9 @@ LOCKFILES = {
     'bun.lockb': 'bun',
     'package-lock.json': 'npm',
 }
+SCAN_DEPTH = 3
+SCAN_SKIP = {'node_modules', 'Library', 'Applications', 'Downloads', 'Movies', 'Music', 'Pictures'}
+INSTALL_MARKERS = ('.modules.yaml', '.package-lock.json', '.yarn-integrity', '.yarn-state.yml')
 DIFFSTAT_LINES = 30
 LOG_TAIL_LINES = 30
 
@@ -155,6 +161,51 @@ def local_clone(pr, start):
     return None
 
 
+def config_urls(git_dir):
+    try:
+        with open(os.path.join(git_dir, 'config')) as file:
+            return re.findall(r'^\s*url\s*=\s*(\S+)', file.read(), re.M)
+    except OSError:
+        return []
+
+
+def points_at(url, pr):
+    host, path = remote_location(url)
+    slug = pr['slug'].lower()
+    return (host == pr['host'] and path == slug) or (host is None and path.endswith(f"/{pr['host']}/{slug}"))
+
+
+def discovered_clones(pr):
+    """Clones of the repository under LOOP_REVIEW_ROOTS (default: the home directory).
+
+    Reads each .git/config instead of running git, so scanning a few hundred
+    clones costs well under a second. Worktrees are not separate clones: their
+    main clone lists them.
+    """
+    roots = [os.path.expanduser(root) for root in os.environ.get('LOOP_REVIEW_ROOTS', '~').split(':') if root]
+    for root in roots:
+        for path, dirs, _ in os.walk(root):
+            if path != root and os.path.isdir(os.path.join(path, '.git')):
+                dirs[:] = []
+                if any(points_at(url, pr) for url in config_urls(os.path.join(path, '.git'))):
+                    yield path
+                continue
+            if path[len(root):].count(os.sep) >= SCAN_DEPTH:
+                dirs[:] = []
+            else:
+                dirs[:] = [d for d in dirs if not d.startswith('.') and d not in SCAN_SKIP]
+
+
+def find_clone(pr, start, head):
+    """The clone the current directory belongs to, else a local clone that has a
+    worktree on the head branch, else any local clone, else None."""
+    here = local_clone(pr, start)
+    if here:
+        return here
+    clones = list(dict.fromkeys(discovered_clones(pr)))
+    return next((clone for clone in clones if tree_on(clone, head)), clones[0] if clones else None)
+
+
 def cached_clone(pr):
     path = os.path.join(CACHE, pr['host'], pr['slug'], '_clone')
     if not os.path.isdir(os.path.join(path, '.git')):
@@ -227,7 +278,7 @@ def counts(tree, upstream):
 
 def place_tree(pr, meta, start):
     """Returns (tree, kind, push remote, base ref)."""
-    repo = local_clone(pr, start) or cached_clone(pr)
+    repo = find_clone(pr, start, meta['head']) or cached_clone(pr)
     remote = remote_for(repo, pr)
     if not remote:
         raise Blocked(f"{repo} has no remote for {pr['host']}/{pr['slug']}")
@@ -329,6 +380,15 @@ def write_stamp(tree, fingerprint):
         file.write(fingerprint)
 
 
+def installed_after_manifests(tree):
+    """An install that is newer than every package.json and lockfile already has them."""
+    markers = [os.path.join(tree, 'node_modules', name) for name in INSTALL_MARKERS]
+    installed = max((os.path.getmtime(path) for path in markers if os.path.exists(path)), default=None)
+    if installed is None:
+        return False
+    return all(os.path.getmtime(os.path.join(tree, name)) <= installed for name in manifests(tree))
+
+
 def clone_dir(source, target):
     cmd = ['cp', '-cR', source, target] if sys.platform == 'darwin' else ['cp', '-a', '--reflink=auto', source, target]
     if subprocess.run(cmd, capture_output=True).returncode != 0:
@@ -343,6 +403,9 @@ def install(tree, logs):
     modules = os.path.join(tree, 'node_modules')
     if os.path.isdir(modules) and read_stamp(tree) == fingerprint:
         return 'reused'
+    if read_stamp(tree) is None and installed_after_manifests(tree):
+        write_stamp(tree, fingerprint)
+        return 'reused (installed after the last manifest change)'
     siblings = [t['worktree'] for t in worktrees(tree)
                 if not same_path(t['worktree'], tree) and os.path.isdir(os.path.join(t['worktree'], 'node_modules'))]
     cloned = ''

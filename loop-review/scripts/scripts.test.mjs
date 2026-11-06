@@ -55,6 +55,7 @@ const repositoryWithFeatureBranch = ({ host = 'github.com', slug = 'acme/app', k
     ...GIT_ENV,
     PATH: `${bin}:${process.env.PATH}`,
     LOOP_REVIEW_CACHE: join(root, 'cache'),
+    LOOP_REVIEW_ROOTS: root,
     FAKE_META: join(root, 'meta.json'),
     FAKE_CLONE_SRC: remote,
     FAKE_PNPM_LOG: join(root, 'pnpm.log'),
@@ -71,7 +72,8 @@ const repositoryWithFeatureBranch = ({ host = 'github.com', slug = 'acme/app', k
     printf 'export const allow = name => name !== "get"\\n' > index.js
     echo node_modules > .gitignore
     git add . && git commit -qm seed && git push -q origin main
-    git switch -qc feat && echo feat > feat.txt && git add feat.txt && git commit -qm feat && git push -q origin feat`)
+    git switch -qc feat && echo feat > feat.txt && git add feat.txt && git commit -qm feat && git push -q origin feat
+    git switch -q main`)
   const work = join(root, 'work')
   git(root, `git clone -q "${remote}" work`)
   const url = kind === 'github'
@@ -112,6 +114,41 @@ test('the tree the feature was written in is reused in place, fast-forwarded and
   assert.equal(f.git(f.work, 'git worktree list | wc -l'), '1', 'no worktree was added')
   assert.equal(f.setup().INSTALL, 'reused')
   assert.equal(f.pnpmRuns().length, 1)
+})
+
+test('a review started outside any clone finds the feature worktree and its install, with no clone or install', t => {
+  const f = repositoryWithFeatureBranch()
+  const feature = join(f.root, 'workspaces', 'feature')
+  f.git(f.work, `git worktree add -q "${feature}" feat`)
+  f.git(feature, 'mkdir node_modules && sleep 1 && echo pnpm > node_modules/.modules.yaml')
+  const terminal = join(f.root, 'terminal')
+  mkdirSync(terminal)
+  const out = f.setup(terminal)
+  assert.equal(out.STATUS, 'ready', out.stdout + out.stderr)
+  assert.equal(out.TREE_KIND, 'feature')
+  assert.equal(out.TREE, feature)
+  assert.equal(out.INSTALL, 'reused (installed after the last manifest change)')
+  assert.deepEqual(f.pnpmRuns(), [])
+  assert.ok(!existsSync(join(f.root, 'cache', 'github.com', 'acme', 'app', '_clone')), 'nothing was cloned')
+  assert.ok(!existsSync(f.review), 'no review tree was made')
+  assert.equal(f.setup(terminal).INSTALL, 'reused')
+})
+
+test('the clone with a worktree on the head branch wins over other clones of the repository', t => {
+  const f = repositoryWithFeatureBranch()
+  f.git(f.root, `git clone -q "${f.remote}" a-first-clone`)
+  f.git(f.work, 'git switch -q feat')
+  const terminal = join(f.root, 'terminal')
+  mkdirSync(terminal)
+  const out = f.setup(terminal)
+  assert.equal(out.TREE, f.work, out.stdout)
+})
+
+test('an install older than a manifest change is installed again', t => {
+  const f = repositoryWithFeatureBranch()
+  f.git(f.work, 'git switch -q feat && mkdir node_modules && echo pnpm > node_modules/.modules.yaml && sleep 1 && touch package.json')
+  const out = f.setup()
+  assert.equal(out.INSTALL, 'pnpm install', out.stdout)
 })
 
 test('a feature branch with no upstream is still reused, and PULL names the head branch', t => {
@@ -296,12 +333,12 @@ test('outside any clone of the repository, one cached clone is made and reused',
   const f = repositoryWithFeatureBranch()
   const elsewhere = join(f.root, 'elsewhere')
   mkdirSync(elsewhere)
-  const out = f.setup(elsewhere)
+  const out = f.setup(elsewhere, { LOOP_REVIEW_ROOTS: elsewhere })
   assert.equal(out.STATUS, 'ready', out.stdout + out.stderr)
   assert.equal(out.TREE_KIND, 'review')
   assert.ok(existsSync(join(f.root, 'cache', 'github.com', 'acme', 'app', '_clone', '.git')))
   assert.match(readFileSync(f.env.FAKE_CLI_LOG, 'utf8'), /gh GH_HOST=github.com .*repo clone github.com\/acme\/app/)
-  assert.equal(f.setup(elsewhere).TREE, out.TREE)
+  assert.equal(f.setup(elsewhere, { LOOP_REVIEW_ROOTS: elsewhere }).TREE, out.TREE)
 })
 
 test('a self-hosted GitLab merge request in a nested group is read from its own host', t => {
