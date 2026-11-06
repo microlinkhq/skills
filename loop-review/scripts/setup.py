@@ -8,8 +8,8 @@ with a one-line REASON (and any detail after a `--- detail` line) and exits 2.
 
 The tree is, in order of preference:
 
-  1. the review tree an earlier run kept for this pull request, branch
-     loop-review/<number> under the cache. Its own unpushed commits are kept: they
+  1. the review tree an earlier run kept for this pull request: the worktree on
+     branch loop-review/<number>, wherever it is, or the cache path for it. Its own unpushed commits are kept: they
      are fixes a BLOCKED run committed, and the next push publishes them;
   2. a worktree of a local clone that has the head branch checked out (the tree the
      feature was written in), when its tracked files are clean and it has no commits
@@ -233,8 +233,8 @@ def place_tree(pr, meta, start):
         raise Blocked(f"{repo} has no remote for {pr['host']}/{pr['slug']}")
     git(repo, 'fetch', '--quiet', remote, meta['base'])
     base = f"{remote}/{meta['base']}"
-    review_path = os.path.join(CACHE, pr['host'], pr['slug'], pr['number'])
     review_branch = f"loop-review/{pr['number']}"
+    review_path = tree_on(repo, review_branch) or os.path.join(CACHE, pr['host'], pr['slug'], pr['number'])
 
     if meta['fork']:
         if pr['kind'] == 'gitlab':

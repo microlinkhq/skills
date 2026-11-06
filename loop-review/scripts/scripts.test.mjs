@@ -174,6 +174,19 @@ test('a second run reuses the review tree, keeps its unpushed fixes and only fet
   assert.equal(f.pnpmRuns().length, 1)
 })
 
+test('a loop-review worktree outside the cache, from an older run, is reused where it is', t => {
+  const f = repositoryWithFeatureBranch()
+  const old = join(f.root, 'tmp-review')
+  f.git(f.work, `git worktree add -q -b loop-review/7 "${old}" origin/feat`)
+  f.git(old, 'echo fix > fix.txt && git add fix.txt && git commit -qm fix')
+  const out = f.setup()
+  assert.equal(out.STATUS, 'ready', out.stdout)
+  assert.equal(out.TREE, old)
+  assert.equal(out.TREE_KIND, 'review')
+  assert.equal(out.UNPUSHED, '1')
+  assert.ok(!existsSync(f.review))
+})
+
 test('a review tree behind the remote is fast-forwarded', t => {
   const f = repositoryWithFeatureBranch()
   dirtyFeatureTree(f)
