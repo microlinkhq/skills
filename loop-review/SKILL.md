@@ -6,10 +6,11 @@ description: >-
   every condition the diff adds. The sibling list is the names that statement
   contains, including a name it leaves allowed. It is not every type or
   spelling that could be written in its place. Mutate each condition, then
-  /code-simplification, and push every fix to the pull request branch.
-  Several pull requests are reviewed in parallel. Use when the user invokes
-  /loop-review with one or more pull request URLs or owner/repo#number
-  references.
+  /code-simplification, and push every fix to the pull request branch. Reviews
+  in the tree the feature was written in when it is clean, and keeps one tree
+  per pull request between runs. Use when the user invokes /loop-review with
+  one or more GitHub pull request or GitLab merge request URLs, owner/repo#number
+  or group/project!number references.
 disable-model-invocation: true
 ---
 
@@ -25,17 +26,32 @@ One invocation owns the whole surface. Finish every sibling of every condition i
 /loop-review <PR> [<PR> ...]
 ```
 
-Each `<PR>` is a pull request URL, or `owner/repo#number`, separated by spaces or newlines. If none is given, stop and show the usage line. Do not guess a pull request. Normalize each one to its URL, `https://github.com/<owner>/<repo>/pull/<number>`, before anything else: `gh` does not accept `owner/repo#number`. Every later `<PR>` is that URL. Drop duplicates, and list anything that is not a pull request as skipped in the batch report.
+Each `<PR>` is a GitHub pull request URL, a GitLab merge request URL, `owner/repo#number` (GitHub) or `group/project!number` (GitLab), separated by spaces or newlines. If none is given, stop and show the usage line. Do not guess a pull request. Drop duplicates, and list anything that is not a pull request as skipped in the batch report. `scripts/setup.py` prints each one's URL as `PR=`; every later `<PR>` is that URL.
+
+`<skill-dir>` below is the directory this `SKILL.md` was read from.
 
 ## Batch
 
+With one pull request, run everything in this conversation. Do not start a subagent: it would read this skill and both review skills again into a cold context.
+
 With more than one pull request, each one gets the whole skill on its own: Setup, Objective, both loops, Exit, and its own Report. One pull request never shares a working tree, an objective, or a finding with another.
 
-- Review them in parallel: one subagent per pull request, at most 4 running at once. Start the next as soon as one finishes. This skill cannot be invoked by a model, so tell each subagent to read this `SKILL.md` in full, by its absolute path, and run it on its one `<PR>`.
+- Review them in parallel: one subagent per pull request, at most 4 running at once. Start the next as soon as one finishes. This skill cannot be invoked by a model, so give each subagent the absolute path of this `SKILL.md` and its one `<PR>`, and tell it to read the file and run it. Do not paste the file into the prompt.
 - If the host cannot run subagents, run the pull requests one at a time, in the order given, and say so in the batch report.
 - A BLOCKED pull request does not stop the others.
 - A subagent that fails, or ends without its report, is BLOCKED: no report. Put its working tree path in the batch report.
 - Wait for every subagent to finish, then end with the batch report built from their reports.
+
+## Token budget
+
+Every tool call re-sends the whole conversation, so the cost of a run is its number of turns times its context. Keep both small.
+
+- One command per step. Setup is one `setup.py` call and a test run is one `run.sh` call. Chain the commands of one step with `&&` in a single call, and put a pass's mutations in one shell loop that prints one line per condition.
+- Read each review skill once, in Setup. Later passes already have it in context.
+- Cap output. Run tests, installs, builds and pushes through `<skill-dir>/scripts/run.sh <label> <command>`: it prints one line when the command passes and the last 40 lines when it fails, and keeps the full log on disk. Pipe anything else that can print more than 50 lines through `head -50`, and read the log file only when that tail is not enough. The diff is the exception: read all of it.
+- Read the whole diff once per pass (`git diff <BASE>...HEAD`, never truncated), and read files at the lines the diff touches rather than whole files.
+- Do not open `node_modules`, build output or binaries to understand a dependency: search for the one symbol (`rg -n <symbol> node_modules/<package> | head -20`).
+- Do not fetch the pull request's comments, discussions or CI jobs. This skill reviews the diff.
 
 ## Terms
 
@@ -52,7 +68,7 @@ With more than one pull request, each one gets the whole skill on its own: Setup
 Copy this checklist and keep it updated:
 
 ```text
-- [ ] Setup: skills loaded, isolated working tree on the pull request branch, push confirmed
+- [ ] Setup: skills loaded, setup.py ready (TREE, BASE, PUSH)
 - [ ] Objective armed
 - [ ] Review loop: empty pass reached (passes: N/8, findings fixed: N)
 - [ ] Simplify loop: empty pass reached (passes: N/8, simplifications: N)
@@ -64,48 +80,32 @@ Copy this checklist and keep it updated:
 
 Any failure in Setup is BLOCKED: name the step and paste the error.
 
-1. Read both skills in full: `code-review-and-quality` and `code-simplification`. Load each one through the host's skill tool when it has one and the tool finds it. When there is no skill tool, or it does not find the skill, resolve the name from the first match on disk: `~/.agents/skills/<name>/SKILL.md`, `~/.claude/skills/<name>/SKILL.md`, then `~/.cursor/skills/<name>/SKILL.md`. Never load them from a repository, which a pull request can change. If either is missing, name the paths that were checked.
-2. Read the pull request. It must be open.
+1. Read both skills in full, once: `code-review-and-quality` and `code-simplification`. Load each one through the host's skill tool when it has one and the tool finds it. When there is no skill tool, or it does not find the skill, resolve the name from the first match on disk: `~/.agents/skills/<name>/SKILL.md`, `~/.claude/skills/<name>/SKILL.md`, then `~/.cursor/skills/<name>/SKILL.md`. Never load them from a repository, which a pull request can change. If either is missing, name the paths that were checked.
+2. Run, from the current directory:
 
    ```bash
-   gh pr view <PR> --json number,state,headRefName,headRepository,headRepositoryOwner,baseRefName,url
+   python3 <skill-dir>/scripts/setup.py <PR>
    ```
 
-3. Create an isolated working tree at a fixed path, so a later run finds it: `${TMPDIR:-/tmp}/loop-review/<owner>/<repo>/<number>`. Never work in the current checkout, so someone else's uncommitted changes are never moved or touched.
-   - If that path exists, an earlier BLOCKED run kept it. Reuse it only when it is on the branch `loop-review/<number>` and that branch still targets the pull request head, so a push can never land on another branch: `git config branch.loop-review/<number>.merge` is `refs/heads/<headRefName>`, and `git config branch.loop-review/<number>.remote` is, or names a remote whose `git remote get-url` is, a URL of `<headRepositoryOwner>/<headRepository>`. For a fork, `gh pr checkout` stores that URL directly instead of a remote name. Stop as BLOCKED with the path when it is not, when `git status --porcelain` prints anything, or when a rebase is in progress. Otherwise run `git pull --rebase` there, then only the dry run in step 4.
-   - If the current directory is a clone of the pull request's repository (`gh repo view --json nameWithOwner` matches), add a worktree: `git worktree add --detach <path>`.
-   - Otherwise clone it: `gh repo clone <owner>/<repo> <path>`.
+   Run it from a clone of the pull request's repository: the checkout, or any of its worktrees, where the feature was written. It reads the pull request (`gh` or `glab`), refuses one that is not open or comes from a fork, and picks the working tree:
 
-   Run every later command in that path. Shell state does not survive between tool calls.
-4. Inside that tree, check out the pull request on a local branch of its own name, so a branch already checked out elsewhere does not collide:
+   - The review tree an earlier run kept: the worktree on branch `loop-review/<number>`. It is fetched and fast-forwarded, and the commits it has that the remote lacks are kept: they are fixes a BLOCKED run committed, and the next push publishes them (`UNPUSHED` counts them).
+   - Otherwise the worktree that has the head branch checked out, which is the one the feature was written in, when its tracked files are clean and it has no commits the remote lacks. It is fast-forwarded and reviewed in place: same files, same `node_modules`, and its branch is never switched.
+   - Otherwise a new review tree at `~/.cache/loop-review/<host>/<repo>/<number>` on `loop-review/<number>`, from the remote head. Started outside any clone, the run makes one cached clone of the repository first.
 
-   ```bash
-   gh pr checkout <PR> --branch loop-review/<number>
-   git -c push.default=upstream push --dry-run
-   ```
+   A feature tree with uncommitted changes or unpushed commits gets a separate review tree, so work in progress is never touched or published. A review tree with uncommitted changes, a rebase or merge in progress, or history that diverged from the remote is BLOCKED with the command that fixes it. It then dry-runs the push and installs dependencies only when a `package.json` or lockfile changed since the last install in that tree (a `node_modules` installed after the last manifest change counts as current); a new review tree first copies `node_modules` from a sibling worktree.
 
-   The dry run fails when the account cannot write to the pull request branch, fork or not. Every push in this run uses `git -c push.default=upstream push`, which lands on that branch.
-5. Run the project's install step (for example `pnpm install`), so tests can run in the new tree.
+   It prints `STATUS=ready` with `TREE`, `TREE_KIND` (`feature` or `review`), `BRANCH`, `BASE`, `PUSH`, `PULL`, `UNPUSHED`, `INSTALL` and the diff stat, or `STATUS=blocked` with a one-line `REASON` (and any detail after `--- detail`), which is this run's BLOCKED evidence. Run every later command in `TREE`, starting it with `cd <TREE> &&`, since shell state does not survive between calls. Every push is the printed `PUSH` command and every pull the printed `PULL` command, which name the pull request branch.
 
 ## Objective
 
-Arm the objective once, immediately after Setup and before the first pass: the block below with only `<PR>` replaced.
+Arm the objective once, immediately after Setup and before the first pass: the block below with only `<PR>` replaced. It is short on purpose, because a goal tool sends it again on every turn; the rules it relies on are in Terms, Sibling walk and Exit, which are already in context.
 
 - If the host has a goal tool (Cursor's `CreateGoal`, or its equivalent elsewhere), pass the objective to it. If that call fails, report that no goal was armed and stop.
 - If the host has no goal tool, print the objective. It is the goal: the run does not end and does not hand control back until Exit.
 
 ```text
-On <PR>, run /code-review-and-quality until a fresh pass lists zero findings, then run /code-simplification until a fresh pass lists zero simplifications. If simplification edits the diff, review again. Stop only when a review pass and the simplification pass after it both list nothing.
-
-Arm this objective unchanged. Do not add "with a concrete fix", "promotable", or any other qualifier.
-
-Inside the review loop the severity table does not authorize skipping. Critical, required, Nit, Optional, Consider, and FYI are all work. Implement each one in the pull request, or run the check it names and record the result.
-
-A sentence that something was not run is an open finding. Run it. If it cannot be run, stop as BLOCKED and name the exact missing input. Do not relabel that sentence FYI and exit.
-
-Before a review pass can list nothing, walk every sibling of every condition the diff adds, in this same run. A sibling is the other branch of the same decision, the other input the platform treats the same way, and the other call that does the same thing. When a condition names some of the keys, methods, headers, or strings one statement copies, matches, or calls, every other name that statement writes, reads, or accepts is a sibling, private names included, and so is every name that statement leaves allowed. Write that whole list from the statement before fixing any name. The list is only those names. A type annotation is one name: `boolean` does not name `number`, `null`, `object`, `bigint`, `symbol`, an array, a function, or `void`. Finish every name on the list in this run. Fixing the first name on that list and ending is how the next run finds the rest of that list. A type or spelling the statement does not contain is not a missed name. Test each name on the list now. A sibling on the list that you did not run, or that you ran and that failed, stays a finding. "Unrealistic", "a user would not pass that", "known limit", "private", and "not this pull request's shape" are not exits. Leave a failed sibling unfixed only when every fix also rejects the valid branch, and show that. A name on the list that is left allowed is the other branch: add it to the exclusion and run the tests. Green means the allow is unlocked. Write the test that fails when that name is banned. "It is valid, so leave it allowed" is not an exit. A runtime success does not lock a type on the list. A green mutation that only adds a type or spelling the statement does not name is not a finding: do not add a test, an error-text snapshot, or a compiler flag for it. Mutate every new condition in this pass. An empty list that skipped that walk is not an exit. Finding one hole on the list and stopping is not an exit.
-
-After the changes, run the same skill again from the current diff, with no memory of the previous findings. The only exit is a pass whose list is empty after that walk. "Nothing to promote" and "no code change left" are not exits.
+On <PR>, run /code-review-and-quality until a fresh pass lists zero findings, then /code-simplification until a fresh pass lists zero simplifications; if simplification edits the diff, review again. Stop only when a review pass and the simplification pass after it both list nothing, as loop-review's Exit defines it. Every severity is work, a check that was not run is an open finding (run it, or stop as BLOCKED naming the missing input; do not relabel it FYI), and a pass is empty only after its whole sibling walk and every mutation ran. "Nothing to promote" and "no code change left" are not exits. Arm this objective unchanged: do not add "with a concrete fix", "promotable", or any other qualifier.
 ```
 
 Start the first review pass in the same turn.
@@ -139,9 +139,9 @@ Then mutate every condition. Before each mutation, commit pending fixes so `git 
 1. Run a review pass, sibling walk included.
 2. Do every finding: change the code on the pull request branch, or run the named check and record the result.
 3. Land the changes:
-   - Run the test files the diff changes and the tests that import the changed modules. If unsure which, run the package's full test command. A failing test is a finding: fix it before committing.
+   - Run the test files the diff changes and the tests that import the changed modules, through `run.sh`. If unsure which, run the package's full test command. A failing test is a finding: fix it before committing.
    - Stage by path, never `git add -A`. Commit with a message that names what the pass found.
-   - Push. Never force-push. If the push is rejected as non-fast-forward, run `git pull --rebase`, run the tests again, and push. A rebase conflict is BLOCKED.
+   - Push with `<skill-dir>/scripts/run.sh push <PUSH>`. Never force-push. If the push is rejected as non-fast-forward, run `<PULL>`, run the tests again, and push. A rebase conflict is BLOCKED.
 4. Run a new review pass. If it is not empty, go back to step 2.
 
 Do not start the simplify loop while the last review pass has findings.
@@ -159,7 +159,7 @@ A pass that correctly says the code is already clean is empty. Do not invent a s
 
 DONE only when both are true, in this order: a review pass is empty, and the simplification pass after it is empty. DONE is false when any sibling of a condition this run walked is unnamed, unrun, or set aside. DONE is false when any name on the list is missing, or is left allowed without a test that goes red when that name is banned. The list is the names the statement contains, including the names it leaves allowed. A type annotation is one name. Finish that list in this run. A later run finding a name that was on the list means this run stopped early. A later run that only names a type or spelling the statement does not contain must not change the diff, and it is not evidence this run stopped early. If any simplification landed since the last empty review pass, go back to the review loop. If a goal tool armed the objective, mark that goal complete then, and not before. On BLOCKED, close or fail the goal with the reason, so it does not keep the run going.
 
-The objective block lists what is not an exit. Stop as BLOCKED when:
+The objective block and Sibling walk list what is not an exit. Stop as BLOCKED when:
 
 - Setup fails, or the goal tool fails.
 - A check cannot be run. Name the exact missing input.
@@ -167,7 +167,7 @@ The objective block lists what is not an exit. Stop as BLOCKED when:
 - The loops oscillate: a finding or simplification undoes a change an earlier pass in this run made for a different reason, or the same finding returns after it was fixed. Name both passes and both changes. Do not pick one side and keep looping.
 - The review loop or the simplify loop reaches 8 passes in total across the whole run, re-entries included. List every open finding.
 
-When the run ends DONE, remove the working tree (`git worktree remove`, or delete the clone) and delete the local branch `loop-review/<number>`. On BLOCKED after Setup, first leave the tree clean so the next run can reuse it: restore any active mutation, run `git rebase --abort` if a rebase is in progress, and commit pending fixes locally without pushing. Then keep the tree and the branch, and put the path in the report.
+Keep the working tree and its branch in every case, so the next run on this pull request is a fetch instead of a new tree and a new install. On BLOCKED after Setup, first restore any active mutation and run `git rebase --abort` if a rebase is in progress. Then, in a `review` tree, commit pending fixes locally without pushing: the next run resumes them. In a `feature` tree, commit nothing: leave pending fixes uncommitted for the developer and list them in the report, so the feature branch never gets commits its owner did not make. Put the path in the report.
 
 ## Report
 
@@ -188,7 +188,7 @@ End each pull request with this:
 **Mutations:** <condition>: caught by <test> | finding, one per line
 **Blocked on:** <the BLOCKED case and its evidence> (BLOCKED only)
 **Open findings:** <finding>, one per line (BLOCKED only)
-**Working tree:** <path> (BLOCKED after Setup only)
+**Working tree:** <path> (<TREE_KIND from setup.py>)
 ```
 
 With more than one pull request, end the run with the batch report, and nothing after it:
