@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -30,7 +30,9 @@ esac
 
 const FAKE_PNPM = `#!/usr/bin/env bash
 echo "$PWD" >> "$FAKE_PNPM_LOG"
+echo "$* node=$(node --version 2>/dev/null)" >> "$FAKE_PNPM_LOG.args"
 [ -n "\${FAKE_PNPM_FAIL:-}" ] && { echo "ERR_PNPM boom"; exit 1; }
+grep -q foreign node_modules/.modules.yaml 2>/dev/null && [[ " $* " != *" --config.confirmModulesPurge=false "* ]] && { echo "ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY"; exit 1; }
 [ -n "\${CI:-}" ] && [ ! -f pnpm-lock.yaml ] && { echo "ERR_PNPM_NO_LOCKFILE"; exit 1; }
 [ -t 0 ] && { echo "stdin is a terminal"; exit 1; }
 mkdir -p node_modules && echo pnpm > node_modules/.modules.yaml
@@ -81,10 +83,12 @@ const repositoryWithFeatureBranch = ({ kind = 'github', slug = 'acme/app', state
     )
     return { status: result.status, stdout: result.stdout, ...values }
   }
-  const pnpmRuns = () => (existsSync(env.FAKE_PNPM_LOG) ? readFileSync(env.FAKE_PNPM_LOG, 'utf8').trim().split('\n') : [])
+  const lines = file => (existsSync(file) ? readFileSync(file, 'utf8').trim().split('\n') : [])
+  const pnpmRuns = () => lines(env.FAKE_PNPM_LOG)
+  const pnpmArgs = () => lines(`${env.FAKE_PNPM_LOG}.args`)
   const pushRemote = script => git(join(root, 'seed'), `git switch -q feat && ${script} && git push -q origin feat`)
   const review = join(root, 'cache', host, slug, '7')
-  return { root, work, env, git, setup, pnpmRuns, pushRemote, review }
+  return { root, work, env, git, setup, pnpmRuns, pnpmArgs, pushRemote, review }
 }
 
 const installed = (f, tree) => f.git(tree, 'mkdir -p node_modules && sleep 1 && echo pnpm > node_modules/.modules.yaml')
@@ -250,4 +254,146 @@ test('run.sh stops a command at the time limit', t => {
   const hang = spawnSync(RUN, ['hang', 'sleep', '30'], { cwd: f.work, env, encoding: 'utf8', timeout: 15000 })
   assert.equal(hang.status, 124)
   assert.match(hang.stdout, /^FAIL hang timed out after 1s/)
+})
+
+const fakeNode = (dir, version) => {
+  mkdirSync(dir, { recursive: true })
+  writeFileSync(join(dir, 'node'), `#!/usr/bin/env bash\necho ${version}\n`)
+  chmodSync(join(dir, 'node'), 0o755)
+  return dir
+}
+
+test('a node_modules linked to another tree is reused while the manifests match, and never installed through', t => {
+  const f = repositoryWithFeatureBranch()
+  const feature = join(f.root, 'workspaces', 'feature')
+  f.git(f.work, `git worktree add -q "${feature}" feat`)
+  installed(f, f.work)
+  symlinkSync(join(f.work, 'node_modules'), join(feature, 'node_modules'))
+  const linked = f.setup(f.work)
+  assert.equal(linked.TREE, feature, linked.stdout)
+  assert.equal(linked.INSTALL, `linked to ${join(f.work, 'node_modules')}`)
+  assert.deepEqual(f.pnpmRuns(), [])
+  assert.ok(!existsSync(join(f.work, 'node_modules', '.loop-review-deps')), 'no stamp written into the shared node_modules')
+
+  f.pushRemote(`echo '{"name":"app","packageManager":"pnpm@9.0.0","dependencies":{"x":"1"}}' > package.json && git commit -qam deps`)
+  const own = f.setup(f.work)
+  assert.equal(own.STATUS, 'ready', own.stdout)
+  assert.match(own.INSTALL, /^copied from .*work, then pnpm install$/)
+  assert.deepEqual(f.pnpmRuns(), [feature])
+  assert.ok(!lstatSync(join(feature, 'node_modules')).isSymbolicLink(), 'the tree got its own node_modules')
+  assert.equal(readFileSync(join(f.work, 'node_modules', '.modules.yaml'), 'utf8'), 'pnpm\n', 'the shared node_modules is untouched')
+})
+
+test('a sibling node_modules whose pnpm store lives outside it is not copied', t => {
+  const f = repositoryWithFeatureBranch()
+  f.git(f.work, 'git switch -q feat && echo wip >> feat.txt')
+  installed(f, f.work)
+  writeFileSync(join(f.work, 'node_modules', '.modules.yaml'), JSON.stringify({ virtualStoreDir: '../../elsewhere/node_modules/.pnpm' }))
+  const out = f.setup()
+  assert.equal(out.STATUS, 'ready', out.stdout)
+  assert.equal(out.TREE_KIND, 'review')
+  assert.equal(out.INSTALL, 'pnpm install')
+})
+
+test('pnpm rebuilds a node_modules laid out with other settings without asking for a terminal', t => {
+  const f = repositoryWithFeatureBranch()
+  f.git(f.work, 'git switch -q feat && mkdir -p node_modules && echo foreign > node_modules/.modules.yaml && echo old > node_modules/.loop-review-deps')
+  const out = f.setup()
+  assert.equal(out.STATUS, 'ready', out.stdout)
+  assert.equal(out.INSTALL, 'pnpm install')
+  assert.match(f.pnpmArgs()[0], /^install --config\.confirmModulesPurge=false /)
+})
+
+test('the node major package.json pins is used for the install and by run.sh, when PATH has another one', t => {
+  const f = repositoryWithFeatureBranch()
+  const nPrefix = join(f.root, 'n')
+  const pinned = fakeNode(join(nPrefix, 'n', 'versions', 'node', '24.1.0', 'bin'), 'v24.1.0')
+  const path = `${fakeNode(join(f.root, 'path-node'), 'v26.7.0')}:${f.env.PATH}`
+  f.git(f.work, 'git switch -q feat')
+  f.pushRemote(`echo '{"name":"app","packageManager":"pnpm@9.0.0","engines":{"node":"24"}}' > package.json && git commit -qam engines`)
+  const out = f.setup(f.work, { PATH: path, N_PREFIX: nPrefix })
+  assert.equal(out.STATUS, 'ready', out.stdout)
+  assert.equal(out.NODE, `v24.1.0 from ${pinned}`)
+  assert.match(f.pnpmArgs()[0], /node=v24\.1\.0$/)
+  const env = { ...f.env, PATH: path }
+  const run = spawnSync(RUN, ['node', 'node', '--version'], { cwd: f.work, env, encoding: 'utf8' })
+  assert.equal(run.status, 0, run.stdout)
+  assert.equal(readFileSync(run.stdout.match(/log=(\S+)/)[1], 'utf8').trim(), 'v24.1.0')
+
+  f.pushRemote(`echo '{"name":"app","packageManager":"pnpm@9.0.0"}' > package.json && git commit -qam unpin`)
+  assert.equal(f.setup(f.work, { PATH: path, N_PREFIX: nPrefix }).NODE, 'v26.7.0')
+  const unpinned = spawnSync(RUN, ['node', 'node', '--version'], { cwd: f.work, env, encoding: 'utf8' })
+  assert.equal(readFileSync(unpinned.stdout.match(/log=(\S+)/)[1], 'utf8').trim(), 'v26.7.0')
+})
+
+test('a pinned node major that is not installed is reported, and the install still runs', t => {
+  const f = repositoryWithFeatureBranch()
+  const path = `${fakeNode(join(f.root, 'path-node'), 'v26.7.0')}:${f.env.PATH}`
+  f.git(f.work, 'git switch -q feat')
+  f.pushRemote(`echo '{"name":"app","packageManager":"pnpm@9.0.0","engines":{"node":"^7"}}' > package.json && git commit -qam engines`)
+  const out = f.setup(f.work, { PATH: path, N_PREFIX: join(f.root, 'none'), HOME: join(f.root, 'home') })
+  assert.equal(out.STATUS, 'ready', out.stdout)
+  assert.equal(out.NODE, 'v26.7.0, but package.json wants 7 and no node 7 is installed')
+  assert.equal(out.INSTALL, 'pnpm install')
+})
+
+test('a linked node_modules is replaced when its owner was not installed for these manifests, is inside the tree, or the repo has workspace packages', t => {
+  const cases = {
+    stale: f => {
+      installed(f, f.work)
+      f.git(f.work, 'sleep 1 && touch package.json')
+      return join(f.work, 'node_modules')
+    },
+    inside: (f, feature) => {
+      f.git(feature, 'mkdir -p nm_real && echo pnpm > nm_real/.modules.yaml')
+      return join(feature, 'nm_real')
+    },
+    workspace: f => {
+      f.pushRemote(`mkdir -p packages/a && echo '{"name":"a"}' > packages/a/package.json && git add packages && git commit -qm pkg`)
+      f.git(f.work, 'git fetch -q origin && git checkout -q origin/feat -- packages')
+      installed(f, f.work)
+      return join(f.work, 'node_modules')
+    }
+  }
+  for (const [name, arrange] of Object.entries(cases)) {
+    const f = repositoryWithFeatureBranch()
+    const feature = join(f.root, 'workspaces', 'feature')
+    f.git(f.work, `git worktree add -q "${feature}" feat`)
+    const target = arrange(f, feature)
+    symlinkSync(target, join(feature, 'node_modules'))
+    const out = f.setup(f.work)
+    assert.equal(out.STATUS, 'ready', `${name}: ${out.stdout}`)
+    assert.doesNotMatch(out.INSTALL, /^linked/, name)
+    assert.equal(out.TREE, feature, `${name}: ${out.stdout}`)
+    assert.ok(!lstatSync(join(feature, 'node_modules')).isSymbolicLink(), `${name}: the tree got its own node_modules`)
+    assert.ok(existsSync(join(target, '.modules.yaml')), `${name}: the link target is untouched`)
+  }
+})
+
+test('a node pin that cannot be met clears the node run.sh used for the previous pin', t => {
+  const f = repositoryWithFeatureBranch()
+  const nPrefix = join(f.root, 'n')
+  fakeNode(join(nPrefix, 'n', 'versions', 'node', '24.1.0', 'bin'), 'v24.1.0')
+  const path = `${fakeNode(join(f.root, 'path-node'), 'v26.7.0')}:${f.env.PATH}`
+  f.git(f.work, 'git switch -q feat')
+  f.pushRemote(`echo '{"name":"app","packageManager":"pnpm@9.0.0","engines":{"node":"24"}}' > package.json && git commit -qam pin`)
+  assert.match(f.setup(f.work, { PATH: path, N_PREFIX: nPrefix }).NODE, /^v24\.1\.0 from /)
+  f.pushRemote(`echo '{"name":"app","packageManager":"pnpm@9.0.0","engines":{"node":"7"}}' > package.json && git commit -qam repin`)
+  assert.match(f.setup(f.work, { PATH: path, N_PREFIX: nPrefix, HOME: join(f.root, 'home') }).NODE, /no node 7 is installed$/)
+  const env = { ...f.env, PATH: path }
+  const run = spawnSync(RUN, ['node', 'node', '--version'], { cwd: f.work, env, encoding: 'utf8' })
+  assert.equal(readFileSync(run.stdout.match(/log=(\S+)/)[1], 'utf8').trim(), 'v26.7.0')
+})
+
+test('run.sh finds the pinned node even when its logs go elsewhere', t => {
+  const f = repositoryWithFeatureBranch()
+  const nPrefix = join(f.root, 'n')
+  fakeNode(join(nPrefix, 'n', 'versions', 'node', '24.1.0', 'bin'), 'v24.1.0')
+  const path = `${fakeNode(join(f.root, 'path-node'), 'v26.7.0')}:${f.env.PATH}`
+  f.git(f.work, 'git switch -q feat')
+  f.pushRemote(`echo '{"name":"app","packageManager":"pnpm@9.0.0","engines":{"node":"24"}}' > package.json && git commit -qam pin`)
+  f.setup(f.work, { PATH: path, N_PREFIX: nPrefix })
+  const env = { ...f.env, PATH: path, LOOP_REVIEW_LOGS: join(f.root, 'elsewhere-logs') }
+  const run = spawnSync(RUN, ['node', 'node', '--version'], { cwd: join(f.work), env, encoding: 'utf8' })
+  assert.equal(readFileSync(run.stdout.match(/log=(\S+)/)[1], 'utf8').trim(), 'v24.1.0')
 })

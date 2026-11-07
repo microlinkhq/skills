@@ -49,7 +49,7 @@ Every tool call re-sends the whole conversation, so the cost of a run is its num
 - One command per step. Setup is one `setup.py` call and a test run is one `run.sh` call. Chain the commands of one step with `&&` in a single call, and put a pass's mutations in one shell loop that prints one line per condition.
 - Read each review skill once, in Setup. Later passes already have it in context.
 - Cap output. Run tests, installs, builds and pushes through `<skill-dir>/scripts/run.sh <label> <command>`: it prints one line when the command passes and the last 40 lines when it fails, and keeps the full log on disk. Pipe anything else that can print more than 50 lines through `head -50`, and read the log file only when that tail is not enough. The diff is the exception: read all of it.
-- Read the whole diff once per pass (`git diff <BASE>...HEAD`, never truncated), and read files at the lines the diff touches rather than whole files.
+- Read the whole diff once per pass (`git diff --no-ext-diff --no-color <BASE>...HEAD`, never truncated: a configured external diff tool prints it side by side at twice the size), and read files at the lines the diff touches rather than whole files.
 - Do not open `node_modules`, build output or binaries to understand a dependency: search for the one symbol (`rg -n <symbol> node_modules/<package> | head -20`).
 - Do not fetch the pull request's comments, discussions or CI jobs. This skill reviews the diff.
 
@@ -93,9 +93,9 @@ Any failure in Setup is BLOCKED: name the step and paste the error.
    - Otherwise the worktree that has the head branch checked out, which is the one the feature was written in, when its tracked files are clean and it has no commits the remote lacks. It is fast-forwarded and reviewed in place: same files, same `node_modules`, and its branch is never switched.
    - Otherwise a new review tree at `~/.cache/loop-review/<host>/<repo>/<number>` on `loop-review/<number>`, from the remote head. Started outside any clone, the run makes one cached clone of the repository first.
 
-   A feature tree with uncommitted changes or unpushed commits gets a separate review tree, so work in progress is never touched or published. A review tree with uncommitted changes, a rebase or merge in progress, or history that diverged from the remote is BLOCKED with the command that fixes it. It then dry-runs the push and installs dependencies only when a `package.json` or lockfile changed since the last install in that tree (a `node_modules` installed after the last manifest change counts as current); a new review tree first copies `node_modules` from a sibling worktree.
+   A feature tree with uncommitted changes or unpushed commits gets a separate review tree, so work in progress is never touched or published. A review tree with uncommitted changes, a rebase or merge in progress, or history that diverged from the remote is BLOCKED with the command that fixes it. It then dry-runs the push and installs dependencies only when a `package.json` or lockfile changed since the last install in that tree (a `node_modules` installed after the last manifest change counts as current); a new review tree first copies `node_modules` from a sibling worktree whose `node_modules` is its own. A `node_modules` that is a symlink to another tree's is shared: it is used while the manifests match that tree's, and replaced by the tree's own install when they do not, so an install never writes through it. When `package.json` pins a Node.js major (`engines.node`) that the `node` on PATH does not match, setup installs with a matching installed node and `run.sh` puts it first on PATH.
 
-   It prints `STATUS=ready` with `TREE`, `TREE_KIND` (`feature` or `review`), `BRANCH`, `BASE`, `PUSH`, `PULL`, `UNPUSHED`, `INSTALL` and the diff stat, or `STATUS=blocked` with a one-line `REASON` (and any detail after `--- detail`), which is this run's BLOCKED evidence. Run every later command in `TREE`, starting it with `cd <TREE> &&`, since shell state does not survive between calls. Every push is the printed `PUSH` command and every pull the printed `PULL` command, which name the pull request branch.
+   It prints `STATUS=ready` with `TREE`, `TREE_KIND` (`feature` or `review`), `BRANCH`, `BASE`, `PUSH`, `PULL`, `UNPUSHED`, `INSTALL`, `NODE` and the diff stat, or `STATUS=blocked` with a one-line `REASON` (and any detail after `--- detail`), which is this run's BLOCKED evidence. Run every later command in `TREE`, starting it with `cd <TREE> &&`, since shell state does not survive between calls. Every push is the printed `PUSH` command and every pull the printed `PULL` command, which name the pull request branch.
 
 ## Objective
 
@@ -141,7 +141,7 @@ Then mutate every condition. Before each mutation, commit pending fixes so `git 
 2. Do every finding: change the code on the pull request branch, or run the named check and record the result.
 3. Land the changes:
    - Run the test files the diff changes and the tests that import the changed modules, through `run.sh`. If unsure which, run the package's full test command. A failing test is a finding: fix it before committing.
-   - Stage by path, never `git add -A`. Commit with a message that names what the pass found.
+   - Stage by path, never `git add -A`. Commit with a message that names what the pass found, through `<skill-dir>/scripts/run.sh commit git commit -m <message>`, so the output of the project's commit hooks is capped too.
    - Push with `<skill-dir>/scripts/run.sh push <PUSH>`. Never force-push. If the push is rejected as non-fast-forward, run `<PULL>`, run the tests again, and push. A rebase conflict is BLOCKED.
 4. Run a new review pass. If it is not empty, go back to step 2.
 
