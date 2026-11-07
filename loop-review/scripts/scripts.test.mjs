@@ -54,6 +54,8 @@ const repositoryWithFeatureBranch = ({ kind = 'github', slug = 'acme/app', state
     ...GIT_ENV,
     PATH: `${bin}:${process.env.PATH}`,
     LOOP_REVIEW_CACHE: join(root, 'cache'),
+    HOME: join(root, 'home'),
+    NVM_DIR: join(root, 'home', '.nvm'),
     FAKE_META: join(root, 'meta.json'),
     FAKE_CLONE_SRC: remote,
     FAKE_PNPM_LOG: join(root, 'pnpm.log')
@@ -396,4 +398,36 @@ test('run.sh finds the pinned node even when its logs go elsewhere', t => {
   const env = { ...f.env, PATH: path, LOOP_REVIEW_LOGS: join(f.root, 'elsewhere-logs') }
   const run = spawnSync(RUN, ['node', 'node', '--version'], { cwd: join(f.work), env, encoding: 'utf8' })
   assert.equal(readFileSync(run.stdout.match(/log=(\S+)/)[1], 'utf8').trim(), 'v24.1.0')
+})
+
+test('a node_modules built for another node major is installed again once the pinned node is there', t => {
+  const f = repositoryWithFeatureBranch()
+  const nPrefix = join(f.root, 'n')
+  const path = `${fakeNode(join(f.root, 'path-node'), 'v26.7.0')}:${f.env.PATH}`
+  const env = { PATH: path, N_PREFIX: nPrefix }
+  f.git(f.work, 'git switch -q feat')
+  f.pushRemote(`echo '{"name":"app","packageManager":"pnpm@9.0.0","engines":{"node":"24"}}' > package.json && git commit -qam pin`)
+  assert.match(f.setup(f.work, env).NODE, /no node 24 is installed$/)
+  assert.match(f.pnpmArgs().at(-1), /node=v26\.7\.0$/)
+  fakeNode(join(nPrefix, 'n', 'versions', 'node', '24.1.0', 'bin'), 'v24.1.0')
+  assert.equal(f.setup(f.work, env).INSTALL, 'pnpm install')
+  assert.match(f.pnpmArgs().at(-1), /node=v24\.1\.0$/)
+  assert.equal(f.setup(f.work, env).INSTALL, 'reused', 'the same node keeps the install')
+})
+
+test('a linked node_modules is not reused while a pinned node other than PATH\'s is in use', t => {
+  const f = repositoryWithFeatureBranch()
+  const nPrefix = join(f.root, 'n')
+  fakeNode(join(nPrefix, 'n', 'versions', 'node', '24.1.0', 'bin'), 'v24.1.0')
+  const env = { PATH: `${fakeNode(join(f.root, 'path-node'), 'v26.7.0')}:${f.env.PATH}`, N_PREFIX: nPrefix }
+  f.pushRemote(`echo '{"name":"app","packageManager":"pnpm@9.0.0","engines":{"node":"24"}}' > package.json && git commit -qam pin`)
+  const feature = join(f.root, 'workspaces', 'feature')
+  f.git(f.work, `git fetch -q origin && git worktree add -q -b feat "${feature}" origin/feat && git checkout -q origin/feat -- package.json`)
+  installed(f, f.work)
+  symlinkSync(join(f.work, 'node_modules'), join(feature, 'node_modules'))
+  const out = f.setup(f.work, env)
+  assert.equal(out.TREE, feature, out.stdout)
+  assert.doesNotMatch(out.INSTALL, /^linked/)
+  assert.ok(!lstatSync(join(feature, 'node_modules')).isSymbolicLink())
+  assert.equal(f.setup(f.work, env).INSTALL, 'reused', 'its own install stays')
 })

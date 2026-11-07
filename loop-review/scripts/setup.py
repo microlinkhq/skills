@@ -230,15 +230,14 @@ def installed_after_manifests(tree, root=None):
         for name in manifests(tree))
 
 
-def shared_install_matches(tree, shared):
+def shared_install_matches(tree, shared, current):
     """A node_modules linked to another tree's serves this one only when nothing about the install would differ."""
     owner = os.path.dirname(shared)
     inside = os.path.commonpath([os.path.realpath(tree), owner]) == os.path.realpath(tree)
     workspace_packages = any(name not in ('package.json', *LOCKFILES) for name in manifests(tree))
     if inside or workspace_packages or not os.path.isdir(shared):
         return False
-    current = fingerprint(tree)
-    if fingerprint(tree, owner) != current:
+    if fingerprint(tree, owner) != fingerprint(tree):
         return False
     stamp = read_stamp(owner)
     return stamp == current or (stamp is None and installed_after_manifests(tree, owner))
@@ -340,37 +339,42 @@ def version_in_path(path):
 
 
 def choose_node(tree, logs):
-    """Returns (bin dir to put first on PATH or None, NODE line). run.sh reads the saved bin dir."""
+    """Returns (bin dir to put first on PATH or None, NODE line, the major installs use). run.sh reads the saved bin dir."""
     saved = os.path.join(logs, NODE_BIN_FILE)
     wanted = pinned_node_major(tree)
     current, version = node_major()
     if wanted is None or current == wanted:
         if os.path.exists(saved):
             os.remove(saved)
-        return None, version or 'not found'
+        return None, version or 'not found', current
     node_bin = next((path for path in installed_node_bins(wanted)
                      if node_major(os.path.join(path, 'node'))[0] == wanted), None)
     if not node_bin:
         if os.path.exists(saved):
             os.remove(saved)
-        return None, f'{version or "not found"}, but package.json wants {wanted} and no node {wanted} is installed'
+        return None, f'{version or "not found"}, but package.json wants {wanted} and no node {wanted} is installed', current
     with open(saved, 'w') as file:
         file.write(node_bin)
-    return node_bin, f"{node_major(os.path.join(node_bin, 'node'))[1]} from {node_bin}"
+    return node_bin, f"{node_major(os.path.join(node_bin, 'node'))[1]} from {node_bin}", wanted
 
 
-def install(tree, logs, node_bin):
+def deps_stamp(tree, major):
+    """Native addons are built for one Node.js major, so the stamp names it next to the manifests."""
+    return f'{fingerprint(tree)} node{major}'
+
+
+def install(tree, logs, node_bin, major):
     if not os.path.isfile(os.path.join(tree, 'package.json')):
         return 'none (no package.json)'
-    current = fingerprint(tree)
+    current = deps_stamp(tree, major)
     modules = os.path.join(tree, 'node_modules')
     if os.path.islink(modules):
         shared = os.path.realpath(modules)
-        if shared_install_matches(tree, shared):
+        if not node_bin and shared_install_matches(tree, shared, current):
             return f'linked to {shared}'
         os.unlink(modules)
     stamp = read_stamp(tree)
-    if os.path.isdir(modules) and (stamp == current or (stamp is None and installed_after_manifests(tree))):
+    if os.path.isdir(modules) and (stamp == current or (stamp is None and not node_bin and installed_after_manifests(tree))):
         with open(stamp_path(tree), 'w') as file:
             file.write(current)
         return 'reused'
@@ -394,7 +398,7 @@ def install(tree, logs, node_bin):
         with open(log) as file:
             raise Blocked(f'`{manager} install` exited {code}, log {log}', '\n'.join(file.read().splitlines()[-LOG_TAIL_LINES:]))
     with open(stamp_path(tree), 'w') as file:
-        file.write(fingerprint(tree))
+        file.write(deps_stamp(tree, major))
     return f"{copied + ', then ' if copied else ''}{manager} install"
 
 
@@ -413,8 +417,8 @@ def main(argv):
         logs = git(tree, 'rev-parse', '--path-format=absolute', '--git-path', 'loop-review')
         os.makedirs(logs, exist_ok=True)
         git(tree, 'push', '--dry-run', '--quiet', '--no-verify', remote, f"HEAD:refs/heads/{meta['head']}")
-        node_bin, node = choose_node(tree, logs)
-        deps = install(tree, logs, node_bin)
+        node_bin, node, major = choose_node(tree, logs)
+        deps = install(tree, logs, node_bin, major)
         ahead, _ = ahead_behind(tree, f"{remote}/{meta['head']}")
     except Blocked as error:
         print('STATUS=blocked')
