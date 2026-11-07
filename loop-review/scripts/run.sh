@@ -9,11 +9,15 @@
 # LOOP_REVIEW_LOGS (default: <git dir>/loop-review) holds the logs.
 # LOOP_REVIEW_TAIL (default: 40) is how many lines a failure prints.
 # LOOP_REVIEW_TIMEOUT (default: 1800) is the time limit in seconds.
+# <logs>/node-bin, written by setup.py when package.json pins another Node.js
+# major than the node on PATH, is put first on PATH.
 set -u
 [ $# -ge 2 ] || { echo "usage: run.sh <label> <command> [args...]" >&2; exit 64; }
 label=$1; shift
 logs=${LOOP_REVIEW_LOGS:-$(git rev-parse --path-format=absolute --git-path loop-review 2>/dev/null || echo "${TMPDIR:-/tmp}/loop-review-logs")}
 mkdir -p "$logs"
+node_bin=$(git rev-parse --path-format=absolute --git-path loop-review/node-bin 2>/dev/null)
+[ -s "$node_bin" ] && PATH="$(cat "$node_bin"):$PATH"
 log="$logs/$(printf %s "$label" | tr -c 'A-Za-z0-9._-' '_').log"
 limit=${LOOP_REVIEW_TIMEOUT:-1800}
 start=$(date +%s)

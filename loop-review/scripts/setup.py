@@ -19,9 +19,15 @@ The tree is, in order:
 
 Trees are never deleted. Dependencies are installed only when a package.json or
 lockfile changed since the last install in that tree; a new tree first copies
-node_modules from a sibling worktree.
+node_modules from a sibling worktree that owns a portable one. A node_modules that
+is a symlink to another tree's is shared: it is reused while the manifests match
+that tree's, and replaced by the tree's own install when they do not, so an
+install never runs through it. When package.json pins a Node.js major the node on
+PATH does not match, a matching installed node is used for the install and saved
+for run.sh.
 """
 
+import glob
 import hashlib
 import json
 import os
@@ -35,6 +41,9 @@ CACHE = os.environ.get('LOOP_REVIEW_CACHE') or os.path.expanduser('~/.cache/loop
 STAMP = '.loop-review-deps'
 LOCKFILES = {'pnpm-lock.yaml': 'pnpm', 'yarn.lock': 'yarn', 'bun.lock': 'bun', 'package-lock.json': 'npm'}
 INSTALL_MARKERS = ('.modules.yaml', '.package-lock.json', '.yarn-integrity', '.yarn-state.yml')
+NODE_BIN_FILE = 'node-bin'
+NODE_MAJOR_PIN = re.compile(r'^\s*[\^~=]?v?(\d+)(?:\.(?:x|\*|0))*\s*$')
+NODE_VERSION_TIMEOUT = 10
 DIFFSTAT_LINES = 30
 LOG_TAIL_LINES = 30
 
@@ -187,11 +196,15 @@ def manifests(tree):
     return sorted(path for path in tracked.splitlines() if 'node_modules/' not in path)
 
 
-def fingerprint(tree):
+def fingerprint(tree, root=None):
+    """Hash of the tree's manifests, read from `root` (default: the tree itself)."""
     digest = hashlib.sha256()
     for name in manifests(tree):
-        with open(os.path.join(tree, name), 'rb') as file:
-            digest.update(name.encode() + file.read())
+        try:
+            with open(os.path.join(root or tree, name), 'rb') as file:
+                digest.update(name.encode() + file.read())
+        except OSError:
+            digest.update(name.encode() + b'\0missing')
     return digest.hexdigest()
 
 
@@ -207,10 +220,27 @@ def read_stamp(tree):
         return None
 
 
-def installed_after_manifests(tree):
-    markers = [os.path.join(tree, 'node_modules', name) for name in INSTALL_MARKERS]
+def installed_after_manifests(tree, root=None):
+    """The tree's manifests, read from `root` (default: the tree), are older than the last install there."""
+    root = root or tree
+    markers = [os.path.join(root, 'node_modules', name) for name in INSTALL_MARKERS]
     installed = max((os.path.getmtime(path) for path in markers if os.path.exists(path)), default=None)
-    return installed is not None and all(os.path.getmtime(os.path.join(tree, name)) <= installed for name in manifests(tree))
+    return installed is not None and all(
+        os.path.exists(os.path.join(root, name)) and os.path.getmtime(os.path.join(root, name)) <= installed
+        for name in manifests(tree))
+
+
+def shared_install_matches(tree, shared, current):
+    """A node_modules linked to another tree's serves this one only when nothing about the install would differ."""
+    owner = os.path.dirname(shared)
+    inside = os.path.commonpath([os.path.realpath(tree), owner]) == os.path.realpath(tree)
+    workspace_packages = any(name not in ('package.json', *LOCKFILES) for name in manifests(tree))
+    if inside or workspace_packages or not os.path.isdir(shared):
+        return False
+    if fingerprint(tree, owner) != fingerprint(tree):
+        return False
+    stamp = read_stamp(owner)
+    return stamp == current or (stamp is None and installed_after_manifests(tree, owner))
 
 
 def package_manager(tree, siblings):
@@ -230,23 +260,126 @@ def package_manager(tree, siblings):
     return 'npm'
 
 
-def install_env():
+def install_env(node_bin):
     """CI makes pnpm install with --frozen-lockfile, which fails in a repository without a lockfile."""
-    return {name: value for name, value in os.environ.items() if name != 'CI'}
+    env = {name: value for name, value in os.environ.items() if name != 'CI'}
+    if node_bin:
+        env['PATH'] = node_bin + os.pathsep + env.get('PATH', '')
+    return env
 
 
-def install(tree, logs):
+def install_command(manager):
+    """pnpm asks before rebuilding a node_modules laid out with other settings, and fails without a terminal."""
+    return [manager, 'install', '--config.confirmModulesPurge=false'] if manager == 'pnpm' else [manager, 'install']
+
+
+def virtual_store_dir(modules):
+    try:
+        with open(os.path.join(modules, '.modules.yaml')) as file:
+            text = file.read()
+    except OSError:
+        return None
+    try:
+        return json.loads(text).get('virtualStoreDir')
+    except ValueError:
+        match = re.search(r'^virtualStoreDir:\s*[\'"]?([^\'"\n]+)', text, re.M)
+        return match.group(1).strip() if match else None
+
+
+def portable(modules):
+    """A real node_modules whose pnpm virtual store lives inside it, so a copy of it still works elsewhere."""
+    if os.path.islink(modules) or not os.path.isdir(modules):
+        return False
+    store = virtual_store_dir(modules)
+    return store is None or not (os.path.isabs(store) or os.path.normpath(store).startswith('..'))
+
+
+def node_major(binary='node', env=None):
+    try:
+        version = subprocess.run([binary, '--version'], capture_output=True, text=True, env=env,
+                                 timeout=NODE_VERSION_TIMEOUT).stdout.strip()
+    except (OSError, subprocess.TimeoutExpired):
+        return None, None
+    match = re.match(r'v?(\d+)', version)
+    return (int(match.group(1)), version) if match else (None, None)
+
+
+def pinned_node_major(tree):
+    try:
+        with open(os.path.join(tree, 'package.json')) as file:
+            wanted = str((json.load(file).get('engines') or {}).get('node') or '')
+    except (OSError, ValueError, AttributeError):
+        return None
+    match = NODE_MAJOR_PIN.match(wanted)
+    return int(match.group(1)) if match else None
+
+
+def installed_node_bins(major):
+    home = os.path.expanduser('~')
+    n_prefix = os.environ.get('N_PREFIX') or os.path.join(home, '.n')
+    nvm = os.environ.get('NVM_DIR') or os.path.join(home, '.nvm')
+    patterns = [
+        os.path.join(n_prefix, 'n', 'versions', 'node', f'{major}.*', 'bin'),
+        os.path.join('/usr/local/n/versions/node', f'{major}.*', 'bin'),
+        os.path.join(nvm, 'versions', 'node', f'v{major}.*', 'bin'),
+        os.path.join(home, '.local/share/fnm/node-versions', f'v{major}.*', 'installation', 'bin'),
+        os.path.join(home, 'Library/Application Support/fnm/node-versions', f'v{major}.*', 'installation', 'bin'),
+        os.path.join(home, '.volta/tools/image/node', f'{major}.*', 'bin'),
+        os.path.join(home, '.local/share/mise/installs/node', f'{major}.*', 'bin'),
+        f'/opt/homebrew/opt/node@{major}/bin',
+        f'/usr/local/opt/node@{major}/bin',
+    ]
+    found = [path for pattern in patterns for path in glob.glob(pattern) if os.access(os.path.join(path, 'node'), os.X_OK)]
+    return sorted(found, key=version_in_path, reverse=True)
+
+
+def version_in_path(path):
+    versions = re.findall(r'(?<![\w.])v?(\d+)\.(\d+)\.(\d+)(?![\w.])', path)
+    return tuple(map(int, versions[-1])) if versions else (0, 0, 0)
+
+
+def choose_node(tree, logs):
+    """Returns (bin dir to put first on PATH or None, NODE line, the major installs use). run.sh reads the saved bin dir."""
+    saved = os.path.join(logs, NODE_BIN_FILE)
+    wanted = pinned_node_major(tree)
+    current, version = node_major()
+    if wanted is None or current == wanted:
+        if os.path.exists(saved):
+            os.remove(saved)
+        return None, version or 'not found', current
+    node_bin = next((path for path in installed_node_bins(wanted)
+                     if node_major(os.path.join(path, 'node'))[0] == wanted), None)
+    if not node_bin:
+        if os.path.exists(saved):
+            os.remove(saved)
+        return None, f'{version or "not found"}, but package.json wants {wanted} and no node {wanted} is installed', current
+    with open(saved, 'w') as file:
+        file.write(node_bin)
+    return node_bin, f"{node_major(os.path.join(node_bin, 'node'))[1]} from {node_bin}", wanted
+
+
+def deps_stamp(tree, major):
+    """Native addons are built for one Node.js major, so the stamp names it next to the manifests."""
+    return f'{fingerprint(tree)} node{major}'
+
+
+def install(tree, logs, node_bin, major):
     if not os.path.isfile(os.path.join(tree, 'package.json')):
         return 'none (no package.json)'
-    current = fingerprint(tree)
+    current = deps_stamp(tree, major)
     modules = os.path.join(tree, 'node_modules')
+    if os.path.islink(modules):
+        shared = os.path.realpath(modules)
+        if not node_bin and shared_install_matches(tree, shared, current):
+            return f'linked to {shared}'
+        os.unlink(modules)
     stamp = read_stamp(tree)
-    if os.path.isdir(modules) and (stamp == current or (stamp is None and installed_after_manifests(tree))):
+    if os.path.isdir(modules) and (stamp == current or (stamp is None and not node_bin and installed_after_manifests(tree))):
         with open(stamp_path(tree), 'w') as file:
             file.write(current)
         return 'reused'
     siblings = [t['path'] for t in worktrees(tree)
-                if os.path.realpath(t['path']) != os.path.realpath(tree) and os.path.isdir(os.path.join(t['path'], 'node_modules'))]
+                if os.path.realpath(t['path']) != os.path.realpath(tree) and portable(os.path.join(t['path'], 'node_modules'))]
     copied = ''
     if not os.path.isdir(modules) and siblings:
         source = next((s for s in siblings if read_stamp(s) == current), siblings[0])
@@ -259,13 +392,13 @@ def install(tree, logs):
     manager = package_manager(tree, siblings)
     log = os.path.join(logs, 'install.log')
     with open(log, 'w') as out:
-        code = subprocess.run([manager, 'install'], cwd=tree, stdin=subprocess.DEVNULL, stdout=out,
-                              stderr=subprocess.STDOUT, env=install_env()).returncode
+        code = subprocess.run(install_command(manager), cwd=tree, stdin=subprocess.DEVNULL, stdout=out,
+                              stderr=subprocess.STDOUT, env=install_env(node_bin)).returncode
     if code != 0:
         with open(log) as file:
             raise Blocked(f'`{manager} install` exited {code}, log {log}', '\n'.join(file.read().splitlines()[-LOG_TAIL_LINES:]))
     with open(stamp_path(tree), 'w') as file:
-        file.write(fingerprint(tree))
+        file.write(deps_stamp(tree, major))
     return f"{copied + ', then ' if copied else ''}{manager} install"
 
 
@@ -284,7 +417,8 @@ def main(argv):
         logs = git(tree, 'rev-parse', '--path-format=absolute', '--git-path', 'loop-review')
         os.makedirs(logs, exist_ok=True)
         git(tree, 'push', '--dry-run', '--quiet', '--no-verify', remote, f"HEAD:refs/heads/{meta['head']}")
-        deps = install(tree, logs)
+        node_bin, node, major = choose_node(tree, logs)
+        deps = install(tree, logs, node_bin, major)
         ahead, _ = ahead_behind(tree, f"{remote}/{meta['head']}")
     except Blocked as error:
         print('STATUS=blocked')
@@ -306,6 +440,7 @@ def main(argv):
         f"PULL=git pull --rebase {remote} {meta['head']}",
         f'UNPUSHED={ahead}',
         f'INSTALL={deps}',
+        f'NODE={node}',
         f'LOGS={logs}',
         '--- diff stat',
         *(stat if len(stat) <= DIFFSTAT_LINES else stat[:DIFFSTAT_LINES - 1] + ['...', stat[-1]]),
