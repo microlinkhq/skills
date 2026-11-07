@@ -117,7 +117,7 @@ Part of every review pass. Write the siblings down. For every condition and ever
 - **The other branch.** The catch next to the success path. The host check next to the gateway check. If one path decides an outcome, the other path that reports the same outcome is part of this pass.
 - **The other input the platform treats the same way.** A missing header, a byte-order mark in front of the bytes the condition reads, a type the browser still executes. If the condition sniffs or matches a string, the shapes that still reach that code are part of this pass.
 - **The other call that does the same thing.** `window.open` and a click. `location` and `document.location`. If one caller is guarded, the other caller is part of this pass.
-- **The reader outside the diff.** A config key, a count, a status, a default, a return shape. When the diff changes a value, every place that reads it or depends on what it causes is part of this pass, wherever it lives. Search the repository for the name and for the effect it produces: a cache TTL set to 0 turns every request into a miss, so an alert on the miss rate is a reader.
+- **The reader outside the diff.** A config key, a count, a status, a default, a return shape. When the diff changes a value, every place in the repository that reads it or depends on what it causes is part of this pass, inside the diff or not. Search the repository for the name and for the effect it produces: a cache TTL set to 0 turns every request into a miss, so an alert on the miss rate is a reader.
 
 Run each sibling. When it fails, it is a finding. When it holds, record the command that passed and do not add a branch for it.
 
