@@ -309,18 +309,18 @@ test('pnpm rebuilds a node_modules laid out with other settings without asking f
 test('the node major package.json pins is used for the install and by run.sh, when PATH has another one', t => {
   const f = repositoryWithFeatureBranch()
   const nPrefix = join(f.root, 'n')
-  const pinned = fakeNode(join(nPrefix, 'n', 'versions', 'node', '24.1.0', 'bin'), 'v24.1.0')
+  const pinned = fakeNode(join(nPrefix, 'n', 'versions', 'node', '9.1.0', 'bin'), 'v9.1.0')
   const path = `${fakeNode(join(f.root, 'path-node'), 'v26.7.0')}:${f.env.PATH}`
   f.git(f.work, 'git switch -q feat')
-  f.pushRemote(`echo '{"name":"app","packageManager":"pnpm@9.0.0","engines":{"node":"24"}}' > package.json && git commit -qam engines`)
+  f.pushRemote(`echo '{"name":"app","packageManager":"pnpm@9.0.0","engines":{"node":"9"}}' > package.json && git commit -qam engines`)
   const out = f.setup(f.work, { PATH: path, N_PREFIX: nPrefix })
   assert.equal(out.STATUS, 'ready', out.stdout)
-  assert.equal(out.NODE, `v24.1.0 from ${pinned}`)
-  assert.match(f.pnpmArgs()[0], /node=v24\.1\.0$/)
+  assert.equal(out.NODE, `v9.1.0 from ${pinned}`)
+  assert.match(f.pnpmArgs()[0], /node=v9\.1\.0$/)
   const env = { ...f.env, PATH: path }
   const run = spawnSync(RUN, ['node', 'node', '--version'], { cwd: f.work, env, encoding: 'utf8' })
   assert.equal(run.status, 0, run.stdout)
-  assert.equal(readFileSync(run.stdout.match(/log=(\S+)/)[1], 'utf8').trim(), 'v24.1.0')
+  assert.equal(readFileSync(run.stdout.match(/log=(\S+)/)[1], 'utf8').trim(), 'v9.1.0')
 
   f.pushRemote(`echo '{"name":"app","packageManager":"pnpm@9.0.0"}' > package.json && git commit -qam unpin`)
   assert.equal(f.setup(f.work, { PATH: path, N_PREFIX: nPrefix }).NODE, 'v26.7.0')
@@ -332,10 +332,10 @@ test('a pinned node major that is not installed is reported, and the install sti
   const f = repositoryWithFeatureBranch()
   const path = `${fakeNode(join(f.root, 'path-node'), 'v26.7.0')}:${f.env.PATH}`
   f.git(f.work, 'git switch -q feat')
-  f.pushRemote(`echo '{"name":"app","packageManager":"pnpm@9.0.0","engines":{"node":"^7"}}' > package.json && git commit -qam engines`)
+  f.pushRemote(`echo '{"name":"app","packageManager":"pnpm@9.0.0","engines":{"node":"^5"}}' > package.json && git commit -qam engines`)
   const out = f.setup(f.work, { PATH: path, N_PREFIX: join(f.root, 'none'), HOME: join(f.root, 'home') })
   assert.equal(out.STATUS, 'ready', out.stdout)
-  assert.equal(out.NODE, 'v26.7.0, but package.json wants 7 and no node 7 is installed')
+  assert.equal(out.NODE, 'v26.7.0, but package.json wants 5 and no node 5 is installed')
   assert.equal(out.INSTALL, 'pnpm install')
 })
 
@@ -375,13 +375,13 @@ test('a linked node_modules is replaced when its owner was not installed for the
 test('a node pin that cannot be met clears the node run.sh used for the previous pin', t => {
   const f = repositoryWithFeatureBranch()
   const nPrefix = join(f.root, 'n')
-  fakeNode(join(nPrefix, 'n', 'versions', 'node', '24.1.0', 'bin'), 'v24.1.0')
+  fakeNode(join(nPrefix, 'n', 'versions', 'node', '9.1.0', 'bin'), 'v9.1.0')
   const path = `${fakeNode(join(f.root, 'path-node'), 'v26.7.0')}:${f.env.PATH}`
   f.git(f.work, 'git switch -q feat')
-  f.pushRemote(`echo '{"name":"app","packageManager":"pnpm@9.0.0","engines":{"node":"24"}}' > package.json && git commit -qam pin`)
-  assert.match(f.setup(f.work, { PATH: path, N_PREFIX: nPrefix }).NODE, /^v24\.1\.0 from /)
-  f.pushRemote(`echo '{"name":"app","packageManager":"pnpm@9.0.0","engines":{"node":"7"}}' > package.json && git commit -qam repin`)
-  assert.match(f.setup(f.work, { PATH: path, N_PREFIX: nPrefix, HOME: join(f.root, 'home') }).NODE, /no node 7 is installed$/)
+  f.pushRemote(`echo '{"name":"app","packageManager":"pnpm@9.0.0","engines":{"node":"9"}}' > package.json && git commit -qam pin`)
+  assert.match(f.setup(f.work, { PATH: path, N_PREFIX: nPrefix }).NODE, /^v9\.1\.0 from /)
+  f.pushRemote(`echo '{"name":"app","packageManager":"pnpm@9.0.0","engines":{"node":"5"}}' > package.json && git commit -qam repin`)
+  assert.match(f.setup(f.work, { PATH: path, N_PREFIX: nPrefix, HOME: join(f.root, 'home') }).NODE, /no node 5 is installed$/)
   const env = { ...f.env, PATH: path }
   const run = spawnSync(RUN, ['node', 'node', '--version'], { cwd: f.work, env, encoding: 'utf8' })
   assert.equal(readFileSync(run.stdout.match(/log=(\S+)/)[1], 'utf8').trim(), 'v26.7.0')
@@ -390,14 +390,14 @@ test('a node pin that cannot be met clears the node run.sh used for the previous
 test('run.sh finds the pinned node even when its logs go elsewhere', t => {
   const f = repositoryWithFeatureBranch()
   const nPrefix = join(f.root, 'n')
-  fakeNode(join(nPrefix, 'n', 'versions', 'node', '24.1.0', 'bin'), 'v24.1.0')
+  fakeNode(join(nPrefix, 'n', 'versions', 'node', '9.1.0', 'bin'), 'v9.1.0')
   const path = `${fakeNode(join(f.root, 'path-node'), 'v26.7.0')}:${f.env.PATH}`
   f.git(f.work, 'git switch -q feat')
-  f.pushRemote(`echo '{"name":"app","packageManager":"pnpm@9.0.0","engines":{"node":"24"}}' > package.json && git commit -qam pin`)
+  f.pushRemote(`echo '{"name":"app","packageManager":"pnpm@9.0.0","engines":{"node":"9"}}' > package.json && git commit -qam pin`)
   f.setup(f.work, { PATH: path, N_PREFIX: nPrefix })
   const env = { ...f.env, PATH: path, LOOP_REVIEW_LOGS: join(f.root, 'elsewhere-logs') }
   const run = spawnSync(RUN, ['node', 'node', '--version'], { cwd: join(f.work), env, encoding: 'utf8' })
-  assert.equal(readFileSync(run.stdout.match(/log=(\S+)/)[1], 'utf8').trim(), 'v24.1.0')
+  assert.equal(readFileSync(run.stdout.match(/log=(\S+)/)[1], 'utf8').trim(), 'v9.1.0')
 })
 
 test('a node_modules built for another node major is installed again once the pinned node is there', t => {
@@ -406,21 +406,21 @@ test('a node_modules built for another node major is installed again once the pi
   const path = `${fakeNode(join(f.root, 'path-node'), 'v26.7.0')}:${f.env.PATH}`
   const env = { PATH: path, N_PREFIX: nPrefix }
   f.git(f.work, 'git switch -q feat')
-  f.pushRemote(`echo '{"name":"app","packageManager":"pnpm@9.0.0","engines":{"node":"24"}}' > package.json && git commit -qam pin`)
-  assert.match(f.setup(f.work, env).NODE, /no node 24 is installed$/)
+  f.pushRemote(`echo '{"name":"app","packageManager":"pnpm@9.0.0","engines":{"node":"9"}}' > package.json && git commit -qam pin`)
+  assert.match(f.setup(f.work, env).NODE, /no node 9 is installed$/)
   assert.match(f.pnpmArgs().at(-1), /node=v26\.7\.0$/)
-  fakeNode(join(nPrefix, 'n', 'versions', 'node', '24.1.0', 'bin'), 'v24.1.0')
+  fakeNode(join(nPrefix, 'n', 'versions', 'node', '9.1.0', 'bin'), 'v9.1.0')
   assert.equal(f.setup(f.work, env).INSTALL, 'pnpm install')
-  assert.match(f.pnpmArgs().at(-1), /node=v24\.1\.0$/)
+  assert.match(f.pnpmArgs().at(-1), /node=v9\.1\.0$/)
   assert.equal(f.setup(f.work, env).INSTALL, 'reused', 'the same node keeps the install')
 })
 
 test('a linked node_modules is not reused while a pinned node other than PATH\'s is in use', t => {
   const f = repositoryWithFeatureBranch()
   const nPrefix = join(f.root, 'n')
-  fakeNode(join(nPrefix, 'n', 'versions', 'node', '24.1.0', 'bin'), 'v24.1.0')
+  fakeNode(join(nPrefix, 'n', 'versions', 'node', '9.1.0', 'bin'), 'v9.1.0')
   const env = { PATH: `${fakeNode(join(f.root, 'path-node'), 'v26.7.0')}:${f.env.PATH}`, N_PREFIX: nPrefix }
-  f.pushRemote(`echo '{"name":"app","packageManager":"pnpm@9.0.0","engines":{"node":"24"}}' > package.json && git commit -qam pin`)
+  f.pushRemote(`echo '{"name":"app","packageManager":"pnpm@9.0.0","engines":{"node":"9"}}' > package.json && git commit -qam pin`)
   const feature = join(f.root, 'workspaces', 'feature')
   f.git(f.work, `git fetch -q origin && git worktree add -q -b feat "${feature}" origin/feat && git checkout -q origin/feat -- package.json`)
   installed(f, f.work)
