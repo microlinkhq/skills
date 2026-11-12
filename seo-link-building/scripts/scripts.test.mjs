@@ -174,7 +174,7 @@ test('template passes on a healthy site', () =>
 
 const RESOLVE_CHECK = 'every internal link resolves'
 const REDIRECT_CHECK = 'no internal link points at a redirect'
-const ABSOLUTE_CHECK = 'internal links are relative'
+const ABSOLUTE_CHECK = 'internal page links are relative'
 
 const failedChecks = stdout =>
   [RESOLVE_CHECK, REDIRECT_CHECK, ABSOLUTE_CHECK].filter(check =>
@@ -237,6 +237,12 @@ test('template matches Vercel regex sources', () =>
       'src/content/blog/post.md': '[old](/old/x)'
     })
     assert.deepEqual(failedChecks(runTemplate(dir).stdout), [REDIRECT_CHECK])
+  }))
+
+test('template allows an absolute link to a static file', () =>
+  withTempDir(dir => {
+    writeTree(dir, { ...HEALTHY_SITE, 'src/content/blog/post.md': '[img](https://a.test/img/a.png)' })
+    assert.equal(runTemplate(dir).status, 0)
   }))
 
 test('template does not treat a conditional redirect source as a page', () =>

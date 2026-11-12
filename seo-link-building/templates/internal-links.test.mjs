@@ -196,8 +196,11 @@ test('no internal link points at a redirect instead of its destination', () => {
   assert.deepEqual(internalLinks.filter(({ link }) => isRedirect(link)), [])
 })
 
-test('internal links are relative, not absolute to the own domain', () => {
-  assert.deepEqual(internalLinks.filter(({ absolute }) => absolute), [])
+test('internal page links are relative, not absolute to the own domain', () => {
+  assert.deepEqual(
+    internalLinks.filter(({ absolute, link }) => absolute && !isStaticFile(normalize(link))),
+    []
+  )
 })
 
 test('link extraction handles the shapes that hide links', () => {

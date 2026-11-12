@@ -30,7 +30,7 @@ Before adding links, make broken ones impossible.
 3. Run it. It fails on four things:
    - a link that resolves to no page, static file or redirect;
    - a link that points at a redirect source instead of its destination;
-   - an absolute link to the own domain (`https://example.com/x` in place of `/x`);
+   - an absolute link to an own page (`https://example.com/x` in place of `/x`). Absolute links to static files pass: some link components route every relative path through the client router, so a raw `.json` or `.pdf` needs the absolute URL to load as a file. Check the repo's link component before making such a link relative;
    - any of the above hidden behind a linked image (`[![](/img.png)](/gone)`).
 4. Fix every finding: repoint dead links to the closest live page, repoint redirected links to the final destination, make absolute self-links relative. Add a route to `EXTRA_ROUTES` only when it is a real generated route. Never loosen the test to pass.
 5. Ship this as PR 1.
