@@ -10,9 +10,17 @@ const USAGE = `Usage:
 non-empty string and every "to" a string, occur exactly once in the original
 file and at the moment it is applied, and not touch text an earlier edit
 inserted. A file that cannot be read is a failed edit. If any edit fails,
-nothing is written.`
+nothing is written. A crash while writing is not rolled back.`
 
-const countOccurrences = (source, needle) => source.split(needle).length - 1
+const countOccurrences = (source, needle) => {
+  let count = 0
+  let index = 0
+  while ((index = source.indexOf(needle, index)) !== -1) {
+    count++
+    index += 1
+  }
+  return count
+}
 
 export const planEdits = (edits, read = file => readFileSync(file, 'utf8')) => {
   const originals = new Map()

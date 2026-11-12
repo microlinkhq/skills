@@ -241,7 +241,7 @@ test('link extraction handles the shapes that hide links', () => {
   assert.deepEqual(linksIn(`<a href="https://${SITE_HOST}/pricing">`), ['/pricing'])
   assert.deepEqual(linksIn(`<a href="https://${SITE_HOST}">`), ['/'])
   assert.deepEqual(linksIn(`[f](https://${SITE_HOST}#features) [q](https://${SITE_HOST}?ref=x)`), ['/#features', '/?ref=x'])
-  assert.deepEqual(linksIn(`[ref]: https://www.${SITE_HOST}/pricing`), ['/pricing'])
+  assert.deepEqual(linksIn(`[ref]: https://www.${BARE_HOST}/pricing`), ['/pricing'])
   assert.deepEqual(linksIn('  [ref]: /pricing'), ['/pricing'])
   assert.deepEqual(linksIn("href: '/pricing'"), ['/pricing'])
   assert.deepEqual(linksIn("<a href={'/pricing'}>"), ['/pricing'])
@@ -266,7 +266,7 @@ test('own-domain schemes count as absolute internal links', () => {
       .filter(Boolean)
   assert.deepEqual(found(`[a](http://${SITE_HOST}/pricing)`), [{ link: '/pricing', absolute: true }])
   assert.deepEqual(found(`[a](//${SITE_HOST}/pricing)`), [{ link: '/pricing', absolute: true }])
-  assert.deepEqual(found(`[a](//www.${SITE_HOST}/x)`), [{ link: '/x', absolute: true }])
+  assert.deepEqual(found(`[a](//www.${BARE_HOST}/x)`), [{ link: '/x', absolute: true }])
 })
 
 test('normalization and static lookups stay inside the site', () => {

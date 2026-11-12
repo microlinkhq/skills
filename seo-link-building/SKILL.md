@@ -20,7 +20,7 @@ Internal links are the one ranking lever fully inside the repo. This skill turns
 
 Before adding links, make broken ones impossible.
 
-1. Copy `<skill-dir>/templates/internal-links.test.mjs` into the repo's test folder (match its layout, e.g. `test/integration/internal-links.mjs`). It uses `node:test`. For Vitest, replace the `node:test` and `node:assert` imports with `import { test, expect } from 'vitest'`. For Jest, use the globals or `import { test, expect } from '@jest/globals'`. Translate each assertion: `assert.deepEqual(a, b)` to `expect(a).toEqual(b)`, `assert.equal(a, b)` to `expect(a).toBe(b)`, `assert.ok(x)` to `expect(x).toBeTruthy()`, `assert.doesNotThrow(fn)` to `expect(fn).not.toThrow()`. Or keep `node:test` and add a `node --test` script.
+1. Copy `<skill-dir>/templates/internal-links.test.mjs` into the repo's test folder (match its layout, e.g. `test/integration/internal-links.test.mjs`). It uses `node:test`. For Vitest, replace the `node:test` and `node:assert` imports with `import { test, expect } from 'vitest'`. For Jest, use the globals or `import { test, expect } from '@jest/globals'`. Translate each assertion: `assert.deepEqual(a, b)` to `expect(a).toEqual(b)`, `assert.equal(a, b)` to `expect(a).toBe(b)`, `assert.ok(x)` to `expect(x).toBeTruthy()`, `assert.doesNotThrow(fn)` to `expect(fn).not.toThrow()`. Or keep `node:test` and add a `node --test` script.
 2. Adapt the config block at the top, then delete the env fallbacks if the repo should not need them:
    - `SITE_HOST`: the production host, so absolute self-links are caught.
    - `ROUTE_SOURCES`: the directories whose files become routes (file-based routers map `index` to the folder).

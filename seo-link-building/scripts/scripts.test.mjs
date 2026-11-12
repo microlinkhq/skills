@@ -187,6 +187,12 @@ test('planEdits shifts earlier ranges when a later edit changes length', () => {
   assert.equal(contents.get('a'), 'P M S')
 })
 
+test('planEdits rejects a phrase that overlaps itself', () => {
+  const { contents, failures } = planEdits([{ file: 'a', from: 'aa', to: 'b' }], () => 'aaa')
+  assert.equal(contents.get('a'), 'aaa')
+  assert.deepEqual(failures.map(({ count }) => count), [2])
+})
+
 test('planEdits treats path aliases as one file', () => {
   const { contents, failures } = planEdits(
     [
@@ -347,6 +353,12 @@ test('template matches Vercel regex sources', () =>
       'src/content/blog/post.md': '[old](/old/x)'
     })
     assert.deepEqual(failedChecks(runTemplate(dir).stdout), [REDIRECT_CHECK])
+  }))
+
+test('template self-checks pass when the host starts with www', () =>
+  withTempDir(dir => {
+    writeTree(dir, HEALTHY_SITE)
+    assert.equal(runTemplate(dir, 'www.a.test').status, 0)
   }))
 
 test('template flags an apex link when the host is www', () =>
