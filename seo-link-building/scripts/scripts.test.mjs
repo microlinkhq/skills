@@ -313,7 +313,7 @@ test('template matches Vercel regex sources', () =>
 
 test('template allows an absolute link to a static file', () =>
   withTempDir(dir => {
-    writeTree(dir, { ...HEALTHY_SITE, 'src/content/blog/post.md': '[img](https://a.test/img/a.png)' })
+    writeTree(dir, { ...HEALTHY_SITE, 'src/content/blog/post.md': '[img](https://a.test/img/a.png/) [q](https://a.test/img/a.png?v=1#x)' })
     assert.equal(runTemplate(dir).status, 0)
   }))
 
