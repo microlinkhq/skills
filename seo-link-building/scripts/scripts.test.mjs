@@ -174,6 +174,19 @@ test('planEdits refuses a later edit when the phrase was not unique in the origi
   assert.deepEqual(failures.map(({ count }) => count), [2])
 })
 
+test('planEdits shifts earlier ranges when a later edit changes length', () => {
+  const { contents, failures } = planEdits(
+    [
+      { file: 'a', from: 'middle', to: 'M' },
+      { file: 'a', from: 'PREFIX', to: 'P' },
+      { file: 'a', from: 'SUFFIX', to: 'S' }
+    ],
+    () => 'PREFIX middle SUFFIX'
+  )
+  assert.equal(failures.length, 0)
+  assert.equal(contents.get('a'), 'P M S')
+})
+
 test('planEdits treats path aliases as one file', () => {
   const { contents, failures } = planEdits(
     [
@@ -340,6 +353,17 @@ test('template flags an apex link when the host is www', () =>
   withTempDir(dir => {
     writeTree(dir, { ...HEALTHY_SITE, 'src/content/blog/post.md': '[a](https://a.test/pricing)' })
     assert.deepEqual(failedChecks(runTemplate(dir, 'www.a.test').stdout), [ABSOLUTE_CHECK])
+  }))
+
+test('template still flags a Vercel redirect when a static file exists', () =>
+  withTempDir(dir => {
+    writeTree(dir, {
+      ...HEALTHY_SITE,
+      'public/manual.pdf': 'x',
+      'vercel.json': JSON.stringify({ redirects: [{ source: '/manual.pdf', destination: '/pricing' }] }),
+      'src/content/blog/post.md': '[m](/manual.pdf)'
+    })
+    assert.deepEqual(failedChecks(runTemplate(dir).stdout), [REDIRECT_CHECK])
   }))
 
 test('template lets a static file shadow an unforced Netlify redirect', () =>
