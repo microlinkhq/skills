@@ -174,6 +174,31 @@ test('planEdits refuses a later edit when the phrase was not unique in the origi
   assert.deepEqual(failures.map(({ count }) => count), [2])
 })
 
+test('planEdits treats path aliases as one file', () => {
+  const { contents, failures } = planEdits(
+    [
+      { file: 'a.md', from: 'alpha', to: 'A' },
+      { file: './a.md', from: 'beta', to: 'B' }
+    ],
+    () => 'alpha beta'
+  )
+  assert.equal(failures.length, 0)
+  assert.equal(contents.size, 1)
+  assert.equal(contents.get('a.md'), 'A B')
+})
+
+test('planEdits refuses an edit whose match crosses text an earlier edit inserted', () => {
+  const { contents, failures } = planEdits(
+    [
+      { file: 'a', from: 'ab', to: 'a' },
+      { file: 'a', from: 'ab', to: 'X' }
+    ],
+    () => 'abb'
+  )
+  assert.equal(contents.get('a'), 'ab')
+  assert.equal(failures.length, 1)
+})
+
 test('planEdits refuses a non-string replacement and a file it cannot read', () => {
   const { contents, failures } = planEdits(
     [{ file: 'a', from: 'a' }, { file: 'missing', from: 'a', to: 'b' }],
@@ -279,7 +304,7 @@ test('template skips interpolated links and story files', () =>
     writeTree(dir, {
       ...HEALTHY_SITE,
       'src/content/blog/post.md': '[home](/)',
-      'src/components/card.jsx': 'const a = <a href={`/features/${slug}`}>x</a>\nconst b = { href: `/blog/${slug}` }',
+      'src/components/card.jsx': "const a = <a href={`/features/${slug}`}>x</a>\nconst b = { href: `/blog/${slug}` }\nconst c = <a href={'/old-home' + slug}>x</a>\nconst d = { href: '/old-home' + slug }",
       'src/components/card.stories.jsx': "const a = <a href='/old-home'>x</a>",
       'src/components/card.test.js': "const a = <a href='/old-home'>x</a>",
       'src/components/card.test.jsx': "const a = <a href='/old-home'>x</a>",
@@ -308,6 +333,25 @@ test('template matches Vercel regex sources', () =>
       'vercel.json': JSON.stringify({ redirects: [{ source: '/old/(.*)', destination: '/' }] }),
       'src/content/blog/post.md': '[old](/old/x)'
     })
+    assert.deepEqual(failedChecks(runTemplate(dir).stdout), [REDIRECT_CHECK])
+  }))
+
+test('template flags an apex link when the host is www', () =>
+  withTempDir(dir => {
+    writeTree(dir, { ...HEALTHY_SITE, 'src/content/blog/post.md': '[a](https://a.test/pricing)' })
+    assert.deepEqual(failedChecks(runTemplate(dir, 'www.a.test').stdout), [ABSOLUTE_CHECK])
+  }))
+
+test('template lets a static file shadow an unforced Netlify redirect', () =>
+  withTempDir(dir => {
+    writeTree(dir, {
+      ...HEALTHY_SITE,
+      'public/manual.pdf': 'x',
+      'static/_redirects': '/manual.pdf /pricing 301\n',
+      'src/content/blog/post.md': '[m](/manual.pdf)'
+    })
+    assert.equal(runTemplate(dir).status, 0)
+    writeTree(dir, { 'static/_redirects': '/manual.pdf /pricing 301!\n' })
     assert.deepEqual(failedChecks(runTemplate(dir).stdout), [REDIRECT_CHECK])
   }))
 

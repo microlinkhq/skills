@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { readFileSync, writeFileSync } from 'node:fs'
+import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const USAGE = `Usage:
@@ -19,29 +20,41 @@ export const planEdits = (edits, read = file => readFileSync(file, 'utf8')) => {
   const inserted = new Map()
   const failures = []
   for (const { file, from, to } of edits) {
-    if (!originals.has(file)) {
+    const key = path.normalize(file)
+    if (!originals.has(key)) {
       let text
       try {
-        text = read(file)
+        text = read(key)
       } catch {
-        failures.push({ file, from, count: 0 })
+        failures.push({ file: key, from, count: 0 })
         continue
       }
-      originals.set(file, text)
-      contents.set(file, text)
-      inserted.set(file, [])
+      originals.set(key, text)
+      contents.set(key, text)
+      inserted.set(key, [])
     }
     const needle = typeof from === 'string' ? from : ''
-    const source = contents.get(file)
+    const source = contents.get(key)
     const count = needle ? countOccurrences(source, needle) : 0
-    const originalCount = needle ? countOccurrences(originals.get(file), needle) : 0
-    const touchesInserted = needle ? inserted.get(file).some(text => text.includes(needle)) : false
-    if (needle.length === 0 || typeof to !== 'string' || count !== 1 || originalCount !== 1 || touchesInserted) {
-      failures.push({ file, from, count: Math.max(count, originalCount) })
+    const originalCount = needle ? countOccurrences(originals.get(key), needle) : 0
+    const index = needle ? source.indexOf(needle) : -1
+    const ranges = inserted.get(key)
+    const overlaps = index >= 0 && ranges.some(([start, stop]) => index < stop && index + needle.length > start)
+    if (needle.length === 0 || typeof to !== 'string' || count !== 1 || originalCount !== 1 || overlaps) {
+      failures.push({ file: key, from, count: Math.max(count, originalCount) })
       continue
     }
-    contents.set(file, source.replace(needle, () => to))
-    inserted.get(file).push(to)
+    const end = index + needle.length
+    const delta = to.length - needle.length
+    contents.set(key, source.slice(0, index) + to + source.slice(end))
+    inserted.set(key, [
+      ...ranges.flatMap(([start, stop]) => {
+        if (stop <= index) return [[start, stop]]
+        if (start >= end) return [[start + delta, stop + delta]]
+        return []
+      }),
+      [index, index + to.length]
+    ])
   }
   return { contents, failures }
 }

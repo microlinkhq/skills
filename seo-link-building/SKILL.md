@@ -20,13 +20,13 @@ Internal links are the one ranking lever fully inside the repo. This skill turns
 
 Before adding links, make broken ones impossible.
 
-1. Copy `<skill-dir>/templates/internal-links.test.mjs` into the repo's test folder (match its layout, e.g. `test/integration/internal-links.mjs`). It uses `node:test`; for vitest or jest, replace the `node:test` and `node:assert` imports with `import { test, expect } from 'vitest'` and translate each assertion: `assert.deepEqual(a, b)` to `expect(a).toEqual(b)`, `assert.equal(a, b)` to `expect(a).toBe(b)`, `assert.ok(x)` to `expect(x).toBeTruthy()`, `assert.doesNotThrow(fn)` to `expect(fn).not.toThrow()`. Or keep `node:test` and add a `node --test` script.
+1. Copy `<skill-dir>/templates/internal-links.test.mjs` into the repo's test folder (match its layout, e.g. `test/integration/internal-links.mjs`). It uses `node:test`. For Vitest, replace the `node:test` and `node:assert` imports with `import { test, expect } from 'vitest'`. For Jest, use the globals or `import { test, expect } from '@jest/globals'`. Translate each assertion: `assert.deepEqual(a, b)` to `expect(a).toEqual(b)`, `assert.equal(a, b)` to `expect(a).toBe(b)`, `assert.ok(x)` to `expect(x).toBeTruthy()`, `assert.doesNotThrow(fn)` to `expect(fn).not.toThrow()`. Or keep `node:test` and add a `node --test` script.
 2. Adapt the config block at the top, then delete the env fallbacks if the repo should not need them:
    - `SITE_HOST`: the production host, so absolute self-links are caught.
    - `ROUTE_SOURCES`: the directories whose files become routes (file-based routers map `index` to the folder).
    - `LINK_SOURCES`: where links are written (content, pages, components).
    - `EXTRA_ROUTES`: routes the build generates (from data files, packages, CMS). Import the same source the build uses instead of hardcoding a list, so the test does not drift.
-   - `STATIC_DIRS` and the redirect readers (Vercel `vercel.json` and Netlify `_redirects` are built in; add Next.js `redirects()` or others the same way). Conditional redirects (Vercel `has`/`missing`, a Netlify `Key=value` token) and Netlify rewrites (status `200`, `404`) are not treated as redirects.
+   - `STATIC_DIRS` and the redirect readers (Vercel `vercel.json` and Netlify `_redirects` are built in; add Next.js `redirects()` or others the same way). Conditional redirects (Vercel `has`/`missing`, a Netlify `Key=value` token) and Netlify rewrites (status `200`, `404`) are not treated as redirects. An unforced Netlify redirect (no `!`) does not apply when a static file exists at that path.
 3. Run it. It fails on four things:
    - a link that resolves to no page, static file or redirect;
    - a link that points at a redirect source instead of its destination;
@@ -39,12 +39,12 @@ The template already handles the shapes that cause false results: link text over
 
 ## Phase 2: Find the pages worth linking to
 
-Ask the user for a Search Console export: Performance, Search results, last 3 months, Export, Download CSV. It is a zip of tables named in the account's UI language (`Pages.csv`/`Queries.csv`, `Páginas.csv`/`Consultas.csv`, ...). On macOS, `unzip` can fail on accented names; use `ditto -x -k export.zip <scratch>/gsc`.
+Ask the user for a Search Console export: Performance, Search results, last 3 months, Export, Download CSV. It is a zip of tables named in the account's UI language (`Pages.csv`/`Queries.csv`, `Páginas.csv`/`Consultas.csv`, ...). In the commands below, `<pages.csv>` and `<queries.csv>` are those exported filenames. On macOS, `unzip` can fail on accented names; use `ditto -x -k export.zip <scratch>/gsc`.
 
 ```bash
-node <skill-dir>/scripts/gsc.mjs striking <scratch>/gsc/Pages.csv --origin https://example.com
-node <skill-dir>/scripts/gsc.mjs striking <scratch>/gsc/Queries.csv
-node <skill-dir>/scripts/gsc.mjs ctr <scratch>/gsc/Pages.csv --origin https://example.com
+node <skill-dir>/scripts/gsc.mjs striking <scratch>/gsc/<pages.csv> --origin https://example.com
+node <skill-dir>/scripts/gsc.mjs striking <scratch>/gsc/<queries.csv>
+node <skill-dir>/scripts/gsc.mjs ctr <scratch>/gsc/<pages.csv> --origin https://example.com
 ```
 
 - `striking` keeps rows at positions 10.5 to 20.5 with at least 500 impressions (`--min-impressions`), largest first. These are the link targets: page two is where a few more internal links move a page the most.
@@ -104,7 +104,7 @@ Then verify:
 
 - PR 2 carries only the new links. Title and body describe what was linked and why ("pages ranking on page two get links from related docs and posts"), with no Search Console numbers.
 - In the PR body, list each target with its new sources, so the reviewer can check anchors without reading the whole diff.
-- Tell the user to re-export Search Console about 3 to 4 weeks after deploy and compare the average position of the linked targets against similar pages that got no links. Run `gsc.mjs striking` on both exports to see which targets left page two.
+- Tell the user to re-export Search Console about 3 to 4 weeks after deploy and compare each target's position in the unfiltered pages table against similar pages that got no links. A target can leave the `striking` report because its impressions fell under 500, not only because it left page two.
 - Offer the `ctr` list from Phase 2 as its own titles-and-descriptions PR.
 
 ## Report

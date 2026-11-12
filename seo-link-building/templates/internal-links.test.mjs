@@ -24,8 +24,8 @@ const FENCED_CODE = /^([ \t]*)(`{3,}|~{3,})[^\n]*\n[\s\S]*?^\1\2[ \t]*$/gm
 const INLINE_CODE = /`[^`\n]*`/g
 const INLINE_TARGET = /\]\(\s*<?([^)\s>]+)>?(?:\s+(?:"[^"]*"|'[^']*'))?\s*\)/g
 const REFERENCE_TARGET = /^ {0,3}\[[^\]\n]+\]:\s*<?([^\s>]+)>?/gm
-const ATTRIBUTE_TARGET = /\b(?:href|to)\s*=\s*\{?\s*(["'`])([^"'`]+?)\1/g
-const OBJECT_HREF_TARGET = /\b(?:href|to)\s*:\s*(["'`])([^"'`]+?)\1/g
+const ATTRIBUTE_TARGET = /\b(?:href|to)\s*=\s*\{?\s*(["'`])([^"'`]+?)\1(?!\s*\+)/g
+const OBJECT_HREF_TARGET = /\b(?:href|to)\s*:\s*(["'`])([^"'`]+?)\1(?!\s*\+)/g
 const EXTERNAL = /^(?:[a-z][a-z\d+.-]*:|\/\/)/i
 const INTERPOLATED = /\$\{|\{\{/
 const PATH_SUFFIX = /[?#].*$/
@@ -35,7 +35,8 @@ const REDIRECT_STATUS = /^(?:30[12378])!?$/
 const RULE_STATUS = /^(?:30[12378]|200|404)!?$/
 
 const escapeRegExp = value => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-const OWN_ORIGIN = new RegExp(String.raw`^(?:https?:)?\/\/(?:www\.)?${escapeRegExp(SITE_HOST)}(?=[/?#]|$)`, 'i')
+const BARE_HOST = SITE_HOST.replace(/^www\./i, '')
+const OWN_ORIGIN = new RegExp(String.raw`^(?:https?:)?\/\/(?:www\.)?${escapeRegExp(BARE_HOST)}(?=[/?#]|$)`, 'i')
 
 const listFiles = (dir, extension) =>
   existsSync(dir)
@@ -79,7 +80,7 @@ const readVercelRedirects = () => {
   if (!existsSync(file)) return []
   return (JSON.parse(readFileSync(file, 'utf8')).redirects ?? [])
     .filter(redirect => !redirect.has && !redirect.missing)
-    .map(redirect => redirect.source)
+    .map(redirect => ({ source: redirect.source, forced: true }))
 }
 
 const parseNetlifyLine = line => {
@@ -90,7 +91,7 @@ const parseNetlifyLine = line => {
     if (status === undefined && RULE_STATUS.test(token)) status = token
     else conditions.push(token)
   }
-  return { source, status, conditional: conditions.length > 0 }
+  return { source, status, conditional: conditions.length > 0, forced: status?.endsWith('!') ?? false }
 }
 
 const readNetlifyRedirects = () =>
@@ -100,9 +101,9 @@ const readNetlifyRedirects = () =>
     .map(parseNetlifyLine)
     .filter(({ source, status, conditional }) =>
       source?.startsWith('/') && !conditional && (!status || REDIRECT_STATUS.test(status)))
-    .map(({ source }) => source)
+    .map(({ source, forced }) => ({ source, forced }))
 
-const redirectSources = [...readVercelRedirects(), ...readNetlifyRedirects()]
+const redirectRules = [...readVercelRedirects(), ...readNetlifyRedirects()]
 
 const escapeOutsideGroups = source => {
   let depth = 0
@@ -120,19 +121,25 @@ const toRedirectPattern = source =>
     `^${escapeOutsideGroups(source)
       .replace(/\/:\w+\*/g, '(?:/.*)?')
       .replace(/\/\*$/, '(?:/.*)?')
+      .replace(/:\w+\(([^)]*)\)/g, '($1)')
       .replace(/:\w+(?!\w*[*(])/g, '[^/]+')}$`
   )
 
-const staticRedirects = new Set(
-  redirectSources.filter(source => !DYNAMIC_SEGMENT.test(source)).map(normalize)
-)
-const dynamicRedirects = redirectSources
-  .filter(source => DYNAMIC_SEGMENT.test(source))
-  .map(toRedirectPattern)
+const staticRules = new Map()
+const dynamicRules = []
+for (const { source, forced } of redirectRules) {
+  if (DYNAMIC_SEGMENT.test(source)) dynamicRules.push({ pattern: toRedirectPattern(source), forced })
+  else staticRules.set(normalize(source), (staticRules.get(normalize(source)) ?? false) || forced)
+}
 
 const isRedirect = link => {
   const route = normalize(link)
-  return staticRedirects.has(route) || dynamicRedirects.some(pattern => pattern.test(route))
+  const forced = []
+  if (staticRules.has(route)) forced.push(staticRules.get(route))
+  for (const rule of dynamicRules) if (rule.pattern.test(route)) forced.push(rule.forced)
+  if (!forced.length) return false
+  if (forced.some(Boolean)) return true
+  return !isStaticFile(route)
 }
 
 const routedFiles = new Map(
@@ -274,9 +281,11 @@ test('redirect sources compile the way the host matches them', () => {
   assert.ok(toRedirectPattern('/blog/*').test('/blog/a'))
   assert.ok(!toRedirectPattern('/blog/*').test('/blogx'))
   assert.ok(!toRedirectPattern('/v1.0/:name').test('/v1X0/intro'))
-  assert.deepEqual(parseNetlifyLine('/*  /index.html  200'), { source: '/*', status: '200', conditional: false })
-  assert.deepEqual(parseNetlifyLine('/old /pricing 301!'), { source: '/old', status: '301!', conditional: false })
-  assert.deepEqual(parseNetlifyLine('/old /pricing 301 Country=us'), { source: '/old', status: '301', conditional: true })
+  assert.ok(toRedirectPattern('/posts/:path(\\d{1,})').test('/posts/123'))
+  assert.ok(!toRedirectPattern('/posts/:path(\\d{1,})').test('/posts/abc'))
+  assert.deepEqual(parseNetlifyLine('/*  /index.html  200'), { source: '/*', status: '200', conditional: false, forced: false })
+  assert.deepEqual(parseNetlifyLine('/old /pricing 301!'), { source: '/old', status: '301!', conditional: false, forced: true })
+  assert.deepEqual(parseNetlifyLine('/old /pricing 301 Country=us'), { source: '/old', status: '301', conditional: true, forced: false })
   for (const status of ['301', '302', '303', '307', '308', '301!', '302!']) {
     assert.equal(REDIRECT_STATUS.test(status), true, status)
   }
