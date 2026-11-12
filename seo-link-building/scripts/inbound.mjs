@@ -25,17 +25,24 @@ export const sitePrefix = origin => {
 export const linkPattern = origin => {
   const site = sitePrefix(origin)
   return new RegExp(
-    String.raw`(?:\]\(\s*<?|\b(?:href|to)\s*=\s*\{?\s*["'\x60]|\bhref\s*:\s*["'\x60]|^ {0,3}\[[^\]\n]+\]:\s*<?)${site}(\/(?!\/)[^)"'\x60\s#?>]*)`,
+    String.raw`(?:\]\(\s*<?|\b(?:href|to)\s*=\s*\{?\s*["'\x60]|\b(?:href|to)\s*:\s*["'\x60]|^ {0,3}\[[^\]\n]+\]:\s*<?)${site}(\/(?!\/)[^)"'\x60\s#?>]*)`,
     'gm'
   )
 }
 
 const FENCED_CODE = /^([ \t]*)(\x60{3,}|~{3,})[^\n]*\n[\s\S]*?^\1\2[ \t]*$/gm
+const INLINE_CODE = /`[^`\n]*`/g
 const MARKDOWN_FILE = /\.mdx?$/
 
+const foldOrigin = source =>
+  source.replace(
+    /((?:[a-z][a-z\d+.-]*:)?)(\/\/)([^/\s)"'`>#?]+)/gi,
+    (_, scheme, slashes, host) => `${scheme.toLowerCase()}${slashes}${host.toLowerCase()}`
+  )
+
 const readLinkable = file => {
-  const source = readFileSync(file, 'utf8')
-  return MARKDOWN_FILE.test(file) ? source.replace(FENCED_CODE, '') : source
+  const source = foldOrigin(readFileSync(file, 'utf8'))
+  return MARKDOWN_FILE.test(file) ? source.replace(FENCED_CODE, '').replace(INLINE_CODE, '') : source
 }
 
 export const normalizeRoute = route => route.replace(/(.)\/+$/, '$1')

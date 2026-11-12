@@ -111,6 +111,10 @@ const main = args => {
   }
   const minImpressions = Number(readFlag(args, '--min-impressions', DEFAULT_MIN_IMPRESSIONS))
   const maxCtr = Number(readFlag(args, '--max-ctr', DEFAULT_MAX_CTR))
+  if (!Number.isFinite(minImpressions) || !Number.isFinite(maxCtr)) {
+    console.error(USAGE)
+    process.exit(1)
+  }
   const origin = readFlag(args, '--origin')
   const rows = parseRows(readFileSync(file, 'utf8'))
   const hits =

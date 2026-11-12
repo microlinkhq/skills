@@ -1,6 +1,6 @@
 ---
 name: seo-link-building
-description: Improve a site's internal linking from Google Search Console data. Guards every internal link with a test (dead links, links to redirects, absolute self-links), finds striking-distance pages (positions 11 to 20) and low-CTR first-page pages, counts inbound links, and adds contextual links in existing sentences through exact-once scripted edits, shipped as reviewable PRs. Use when the user mentions internal linking, link building, internal link audit, orphan pages, striking distance, Search Console or GSC exports, pages stuck on page two, or wants to apply an "internal link maxxing" playbook to a repo.
+description: Improve a site's internal linking from Google Search Console data. Guards every internal link with a test (dead links, links to redirects, absolute self-links), finds striking-distance pages (positions 10.5 to 20.5) and low-CTR first-page pages, counts inbound links, and adds contextual links in existing sentences through exact-once scripted edits, shipped as reviewable PRs. Use when the user mentions internal linking, link building, internal link audit, orphan pages, striking distance, Search Console or GSC exports, pages stuck on page two, or wants to apply an "internal link maxxing" playbook to a repo.
 ---
 
 # SEO Link Building
@@ -26,7 +26,7 @@ Before adding links, make broken ones impossible.
    - `ROUTE_SOURCES`: the directories whose files become routes (file-based routers map `index` to the folder).
    - `LINK_SOURCES`: where links are written (content, pages, components).
    - `EXTRA_ROUTES`: routes the build generates (from data files, packages, CMS). Import the same source the build uses instead of hardcoding a list, so the test does not drift.
-   - `STATIC_DIRS` and the redirect readers (Vercel `vercel.json` and Netlify `_redirects` are built in; add Next.js `redirects()` or others the same way). Conditional redirects (`has`/`missing`) and Netlify rewrites (status `200`, `404`) are not treated as redirects.
+   - `STATIC_DIRS` and the redirect readers (Vercel `vercel.json` and Netlify `_redirects` are built in; add Next.js `redirects()` or others the same way). Conditional redirects (Vercel `has`/`missing`, a Netlify `Key=value` token) and Netlify rewrites (status `200`, `404`) are not treated as redirects.
 3. Run it. It fails on four things:
    - a link that resolves to no page, static file or redirect;
    - a link that points at a redirect source instead of its destination;
@@ -35,7 +35,7 @@ Before adding links, make broken ones impossible.
 4. Fix every finding: repoint dead links to the closest live page, repoint redirected links to the final destination, make absolute self-links relative. Add a route to `EXTRA_ROUTES` only when it is a real generated route. Never loosen the test to pass.
 5. Ship this as PR 1.
 
-The template already handles the shapes that cause false results: link text over several lines, an image plus text inside a link, link titles (`[a](/x "Title")`), `[a](</x>)`, reference definitions (indented too), `href={'/x'}`, `<Link to="/x">`, relative links (resolved against the file's route), protocol-relative URLs (`//cdn...`), `?query` and `#hash`, trailing slashes, percent-encoding, template literals (`${slug}` is skipped), links inside code fences and code spans in Markdown, Storybook and test files, and path traversal in static lookups. In MDX, a JSX template literal inside prose is read as a code span and skipped.
+The template already handles the shapes that cause false results: link text over several lines, an image plus text inside a link, link titles (`[a](/x "Title")`), `[a](</x>)`, reference definitions (indented too), `href={'/x'}`, `<Link to="/x">`, `{ href: '/x' }` and `{ to: '/x' }`, relative links (resolved against the file's route; an index route is a directory; a relative `.md` or `.mdx` suffix and a trailing `index` are removed unless that path is a real static file), protocol-relative URLs (`//cdn...` is external, `//example.com/...` is an absolute self-link), `?query` and `#hash`, trailing slashes, percent-encoding, template literals (`${slug}` is skipped), links inside code fences and code spans in Markdown, Storybook and test files, and path traversal in static lookups. In MDX, a JSX template literal inside prose is read as a code span and skipped.
 
 ## Phase 2: Find the pages worth linking to
 
@@ -47,8 +47,8 @@ node <skill-dir>/scripts/gsc.mjs striking <scratch>/gsc/Queries.csv
 node <skill-dir>/scripts/gsc.mjs ctr <scratch>/gsc/Pages.csv --origin https://example.com
 ```
 
-- `striking` keeps rows at positions 11 to 20 with at least 500 impressions (`--min-impressions`), largest first. These are the link targets: page two is where a few more internal links move a page the most.
-- On queries, it shows what each target is almost ranking for. That query is the anchor wording to look for.
+- `striking` keeps rows at positions 10.5 to 20.5 with at least 500 impressions (`--min-impressions`), largest first. These are the link targets: page two is where a few more internal links move a page the most.
+- On a queries export, the same filter lists queries that themselves sit on page two. Use one as anchor wording when it describes a target; the export is not a per-page query list.
 - `ctr` keeps first-page rows with CTR at or under 3% (`--max-ctr`) and prints the clicks one CTR point would add. Those pages do not need links, they need better titles and meta descriptions. Report them as a separate follow-up, never fold them into the links PR. Note for the user that 2 to 4% CTR is normal around position 8, that Google rewrites snippets, and that AI Overviews lower CTR, so the gain is an estimate.
 
 Pick 5 to 15 targets. Prefer pages that match what the business sells over pages that only attract traffic.
@@ -59,7 +59,7 @@ Pick 5 to 15 targets. Prefer pages that match what the business sells over pages
 node <skill-dir>/scripts/inbound.mjs --origin https://example.com /target-a /target-b
 ```
 
-It prints how many source files link to each route and lists the first few. Without `--dir` it scans `src`, `content`, `app`, `pages` and `docs`. Low counts are the priority. A target that is only linked from the footer or nav has almost no contextual links, which is exactly what this skill adds.
+It prints how many source files link to each route and lists the first few. Fenced and inline code in Markdown is ignored, and the scheme and host of an absolute link are matched case-insensitively. Without `--dir` it scans `src`, `content`, `app`, `pages` and `docs`. Low counts are the priority. A target that is only linked from the footer or nav has almost no contextual links, which is exactly what this skill adds.
 
 ## Phase 4: Choose sources and anchors
 

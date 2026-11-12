@@ -25,22 +25,25 @@ const INLINE_CODE = /`[^`\n]*`/g
 const INLINE_TARGET = /\]\(\s*<?([^)\s>]+)>?(?:\s+(?:"[^"]*"|'[^']*'))?\s*\)/g
 const REFERENCE_TARGET = /^ {0,3}\[[^\]\n]+\]:\s*<?([^\s>]+)>?/gm
 const ATTRIBUTE_TARGET = /\b(?:href|to)\s*=\s*\{?\s*(["'`])([^"'`]+?)\1/g
-const OBJECT_HREF_TARGET = /\bhref\s*:\s*(["'`])([^"'`]+?)\1/g
+const OBJECT_HREF_TARGET = /\b(?:href|to)\s*:\s*(["'`])([^"'`]+?)\1/g
 const EXTERNAL = /^(?:[a-z][a-z\d+.-]*:|\/\/)/i
 const INTERPOLATED = /\$\{|\{\{/
 const PATH_SUFFIX = /[?#].*$/
 const TRAILING_SLASH = /(.)\/+$/
 const DYNAMIC_SEGMENT = /[[:*(]/
-const REDIRECT_STATUS = /^(?:30[1278])!?$/
+const REDIRECT_STATUS = /^(?:30[12378])!?$/
+const RULE_STATUS = /^(?:30[12378]|200|404)!?$/
 
 const escapeRegExp = value => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 const OWN_ORIGIN = new RegExp(String.raw`^(?:https?:)?\/\/(?:www\.)?${escapeRegExp(SITE_HOST)}(?=[/?#]|$)`, 'i')
 
 const listFiles = (dir, extension) =>
   existsSync(dir)
-    ? readdirSync(dir, { recursive: true, withFileTypes: true })
-      .filter(entry => entry.isFile() && extension.test(entry.name))
-      .map(entry => path.join(entry.parentPath ?? entry.path, entry.name))
+    ? readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
+      const full = path.join(dir, entry.name)
+      if (entry.isDirectory()) return listFiles(full, extension)
+      return entry.isFile() && extension.test(entry.name) ? [full] : []
+    })
     : []
 
 const toRoute = (dir, file, extension) =>
@@ -63,6 +66,14 @@ const safeDecode = value => {
 const normalize = link =>
   safeDecode(link.replace(PATH_SUFFIX, '')).replace(TRAILING_SLASH, '$1') || '/'
 
+const relativeRoute = pathname =>
+  pathname.replace(/\.mdx?$/, '').replace(/(^|\/)index$/, '') || '/'
+
+const resolutionBase = (file, route) => {
+  if (!route || route.endsWith('/')) return route
+  return path.basename(file, path.extname(file)) === 'index' ? `${route}/` : route
+}
+
 const readVercelRedirects = () => {
   const file = path.join(ROOT, 'vercel.json')
   if (!existsSync(file)) return []
@@ -72,8 +83,14 @@ const readVercelRedirects = () => {
 }
 
 const parseNetlifyLine = line => {
-  const [source, , status] = line.trim().split(/\s+/)
-  return { source, status }
+  const [source, , ...rest] = line.trim().split(/\s+/)
+  let status
+  const conditions = []
+  for (const token of rest) {
+    if (status === undefined && RULE_STATUS.test(token)) status = token
+    else conditions.push(token)
+  }
+  return { source, status, conditional: conditions.length > 0 }
 }
 
 const readNetlifyRedirects = () =>
@@ -81,7 +98,8 @@ const readNetlifyRedirects = () =>
     .filter(existsSync)
     .flatMap(file => readFileSync(file, 'utf8').split('\n'))
     .map(parseNetlifyLine)
-    .filter(({ source, status }) => source?.startsWith('/') && (!status || REDIRECT_STATUS.test(status)))
+    .filter(({ source, status, conditional }) =>
+      source?.startsWith('/') && !conditional && (!status || REDIRECT_STATUS.test(status)))
     .map(({ source }) => source)
 
 const redirectSources = [...readVercelRedirects(), ...readNetlifyRedirects()]
@@ -163,8 +181,9 @@ const classify = (target, route) => {
   if (EXTERNAL.test(target)) return null
   if (target.startsWith('/')) return { link: target, absolute: false }
   if (!route) return null
-  const resolved = new URL(target, `https://${SITE_HOST}${route}`)
-  return { link: resolved.pathname, absolute: false }
+  const pathname = new URL(target, `https://${SITE_HOST}${route}`).pathname
+  const link = isStaticFile(normalize(pathname)) ? pathname : relativeRoute(pathname)
+  return { link, absolute: false }
 }
 
 const sourceFiles = LINK_SOURCES.flatMap(({ dir, extension }) =>
@@ -174,7 +193,7 @@ const sourceFiles = LINK_SOURCES.flatMap(({ dir, extension }) =>
 const internalLinks = sourceFiles.flatMap(file => {
   const route = routedFiles.get(file)
   return extractTargets(readFileSync(file, 'utf8'), { markdown: MARKDOWN_FILE.test(file) })
-    .map(target => classify(target, route))
+    .map(target => classify(target, resolutionBase(file, route)))
     .filter(Boolean)
     .map(found => ({ file: path.relative(ROOT, file), ...found }))
 })
@@ -223,8 +242,24 @@ test('link extraction handles the shapes that hide links', () => {
   assert.deepEqual(linksIn(`[a](https://${SITE_HOST}.evil.test/x)`), [])
   assert.deepEqual(linksIn('[a](../gone)', '/blog/post'), ['/gone'])
   assert.deepEqual(linksIn('[a](../gone)'), [])
+  assert.equal(relativeRoute('/blog/post.md'), '/blog/post')
+  assert.equal(relativeRoute('/guide/index.md'), '/guide')
+  assert.equal(relativeRoute('/index.md'), '/')
+  assert.deepEqual(linksIn('[a](/readme.md)'), ['/readme.md'])
+  assert.deepEqual(linksIn("to: '/pricing'"), ['/pricing'])
+  assert.deepEqual(extractTargets('const a = { href: "/pricing" }\nconst b = { to: `/docs` }'), ['/pricing', '/docs'])
   assert.deepEqual(linksIn('```md\n[a](/in-fence)\n```\n`[b](/in-span)`'), [])
   assert.deepEqual(linksIn('```sh\nls\n```\n\n```js\nrun()\n```\n\n[c](/after-fences)'), ['/after-fences'])
+})
+
+test('own-domain schemes count as absolute internal links', () => {
+  const found = sample =>
+    extractTargets(sample, { markdown: true })
+      .map(target => classify(target, '/'))
+      .filter(Boolean)
+  assert.deepEqual(found(`[a](http://${SITE_HOST}/pricing)`), [{ link: '/pricing', absolute: true }])
+  assert.deepEqual(found(`[a](//${SITE_HOST}/pricing)`), [{ link: '/pricing', absolute: true }])
+  assert.deepEqual(found(`[a](//www.${SITE_HOST}/x)`), [{ link: '/x', absolute: true }])
 })
 
 test('normalization and static lookups stay inside the site', () => {
@@ -236,6 +271,16 @@ test('normalization and static lookups stay inside the site', () => {
 test('redirect sources compile the way the host matches them', () => {
   assert.ok(toRedirectPattern('/old/(.*)').test('/old/x'))
   assert.ok(toRedirectPattern('/docs/:path*').test('/docs/a/b'))
+  assert.ok(toRedirectPattern('/blog/*').test('/blog/a'))
+  assert.ok(!toRedirectPattern('/blog/*').test('/blogx'))
   assert.ok(!toRedirectPattern('/v1.0/:name').test('/v1X0/intro'))
-  assert.deepEqual(parseNetlifyLine('/*  /index.html  200'), { source: '/*', status: '200' })
+  assert.deepEqual(parseNetlifyLine('/*  /index.html  200'), { source: '/*', status: '200', conditional: false })
+  assert.deepEqual(parseNetlifyLine('/old /pricing 301!'), { source: '/old', status: '301!', conditional: false })
+  assert.deepEqual(parseNetlifyLine('/old /pricing 301 Country=us'), { source: '/old', status: '301', conditional: true })
+  for (const status of ['301', '302', '303', '307', '308', '301!', '302!']) {
+    assert.equal(REDIRECT_STATUS.test(status), true, status)
+  }
+  for (const status of ['200', '200!', '404', '300', '304']) {
+    assert.equal(REDIRECT_STATUS.test(status), false, status)
+  }
 })

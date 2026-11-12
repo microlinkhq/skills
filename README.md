@@ -83,7 +83,7 @@ Drives each pull request it is given to an empty code review and an empty simpli
 
 > `npx -y skills add microlinkhq/skills/seo-link-building`
 
-Improve a site's internal linking from Google Search Console data. Guards every internal link with a test (dead links, links to redirects, absolute self-links), finds striking-distance pages (positions 11 to 20) and low-CTR first-page pages, counts inbound links, and adds contextual links in existing sentences through exact-once scripted edits, shipped as reviewable PRs. Use when the user mentions internal linking, link building, internal link audit, orphan pages, striking distance, Search Console or GSC exports, pages stuck on page two, or wants to apply an "internal link maxxing" playbook to a repo.
+Improve a site's internal linking from Google Search Console data. Guards every internal link with a test (dead links, links to redirects, absolute self-links), finds striking-distance pages (positions 10.5 to 20.5) and low-CTR first-page pages, counts inbound links, and adds contextual links in existing sentences through exact-once scripted edits, shipped as reviewable PRs. Use when the user mentions internal linking, link building, internal link audit, orphan pages, striking distance, Search Console or GSC exports, pages stuck on page two, or wants to apply an "internal link maxxing" playbook to a repo.
 
 ### youtube-dl-exec
 
