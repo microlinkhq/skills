@@ -79,6 +79,12 @@ Visual regression diffs between two URLs or two images with microlink difftool, 
 
 Drives each pull request it is given to an empty code review and an empty simplification: loops `/code-review-and-quality`, testing every sibling of every condition the diff adds. The sibling list is the names that statement contains, including a name it leaves allowed. It is not every type or spelling that could be written in its place. Mutate each condition, then `/code-simplification`, and push every fix to the pull request branch. Reviews in the tree the feature was written in when it is clean, and keeps one tree per pull request between runs. Use when the user invokes `/loop-review` with one or more GitHub pull request or GitLab merge request URLs, `owner/repo#number` or `group/project!number` references.
 
+### seo-link-building
+
+> `npx -y skills add microlinkhq/skills/seo-link-building`
+
+Improve a site's internal linking from Google Search Console data. Guards every internal link with a test (dead links, links to redirects, absolute self-links), finds striking-distance pages (positions 11 to 20) and low-CTR first-page pages, counts inbound links, and adds contextual links in existing sentences through exact-once scripted edits, shipped as reviewable PRs. Use when the user mentions internal linking, link building, internal link audit, orphan pages, striking distance, Search Console or GSC exports, pages stuck on page two, or wants to apply an "internal link maxxing" playbook to a repo.
+
 ### youtube-dl-exec
 
 > `npx -y skills add microlinkhq/skills/youtube-dl-exec`
