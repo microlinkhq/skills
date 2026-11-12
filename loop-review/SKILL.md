@@ -4,8 +4,9 @@ description: >-
   Drives each pull request it is given to an empty code review and an empty
   simplification: loops /code-review-and-quality, testing every sibling of
   every condition the diff adds. The sibling list is the names that statement
-  contains, including a name it leaves allowed. It is not every type or
-  spelling that could be written in its place. Mutate each condition, then
+  contains, including a name it leaves allowed, plus every member of a set
+  the statement must cover (programs a gate checks, files an image copies). It
+  is not every type or spelling that could be written in its place. Mutate each condition, then
   /code-simplification, and push every fix to the pull request branch. Then
   runs /autopilot on it: review comments, conflicts and CI until the pull
   request is merge-ready. Reviews in the tree the feature was written in when
@@ -19,7 +20,7 @@ disable-model-invocation: true
 
 Two loops, in this order, on each pull request: review until a pass is empty, then simplify until a pass is empty. Then Autopilot: run /autopilot until the pull request is merge-ready.
 
-One invocation owns the whole surface. Finish every sibling of every condition in this run. The next invocation is not where a name on this run's list is allowed to appear. A type or spelling the statement does not contain is not on that list.
+One invocation owns the whole surface. Finish every sibling of every condition in this run. The next invocation is not where a name on this run's list is allowed to appear. A type or spelling the statement does not contain is not on that list. The exception is a list whose job is to check or supply every member of a set (Sibling walk): every member of that set is on the list, named in the statement or not.
 
 ## Usage
 
@@ -49,7 +50,7 @@ Every tool call re-sends the whole conversation, so the cost of a run is its num
 
 - One command per step. Setup is one `setup.py` call and a test run is one `run.sh` call. Chain the commands of one step with `&&` in a single call, and put a pass's mutations in one shell loop that prints one line per condition.
 - Read each review skill once, in Setup. Later passes already have it in context.
-- Cap output. Run tests, installs, builds and pushes through `<skill-dir>/scripts/run.sh <label> <command>`: it prints one line when the command passes and the last 40 lines when it fails, and keeps the full log on disk. Pipe anything else that can print more than 50 lines through `head -50`, and read the log file only when that tail is not enough. The diff is the exception: read all of it.
+- Cap output. Run tests, installs, builds and pushes through `<skill-dir>/scripts/run.sh <label> <command>`: it prints one line when the command passes and the last 40 lines when it fails, and keeps the full log on disk. Pipe anything else that can print more than 50 lines through `head -50`, except a listing a sibling walk compares, which goes to a file and is filtered by command, never truncated. Read the log file only when that tail is not enough. The diff is the exception: read all of it.
 - Read the whole diff once per pass (`git diff --no-ext-diff --no-color <BASE>...HEAD`, never truncated: a configured external diff tool prints it side by side at twice the size), and read files at the lines the diff touches rather than whole files.
 - Do not open `node_modules`, build output or binaries to understand a dependency: search for the one symbol (`rg -n <symbol> node_modules/<package> | head -20`).
 - During the loops, do not fetch the pull request's comments, discussions or CI jobs: a pass reviews the diff, not what others said about it. Autopilot reads them, after the loops.
@@ -120,10 +121,16 @@ Part of every review pass. Write the siblings down. For every condition and ever
 - **The other input the platform treats the same way.** A missing header, a byte-order mark in front of the bytes the condition reads, a type the browser still executes. If the condition sniffs or matches a string, the shapes that still reach that code are part of this pass.
 - **The other call that does the same thing.** `window.open` and a click. `location` and `document.location`. If one caller is guarded, the other caller is part of this pass.
 - **The reader outside the diff.** A config key, a count, a status, a default, a return shape. When the diff changes a value, every place in the repository that reads it or depends on what it causes is part of this pass, inside the diff or not. Search the repository for the name and for the effect it produces: a cache TTL set to 0 turns every request into a miss, so an alert on the miss rate is a reader.
+- **What the old one provided.** When the diff removes or replaces something that supplies files, programs, packages, or settings at run time (a base image, a package, a service, a config file the runtime reads), what it supplied that the repository, its CI, or its runtime still uses is part of this pass. Produce it with commands on both sides, never from memory, and write each side to a file outside the tree:
+  - An image: build the new one (once per change to its build inputs, the Dockerfile, the files it copies and the lockfiles; later passes reuse both listings). Compare packages with `dpkg-query -W -f='${Package} ${Version}\n'` and `comm -23`, then list the files of each package only the old side has (`dpkg -L`) and keep those under `lib`, `share/glvnd`, `dri`, `gbm`, or another driver or vendor directory. Compare `docker image inspect --format '{{json .Config}}'` too: `ENV`, `USER` and `ENTRYPOINT` are supplied.
+  - A package: `npm ls --all` on both commits.
+  - Then check what is still used, by running it: each program the source and CI run or spawn (grep them) with its pinned version (`<bin> --version` in the new image: a `python3.12` pin needs 3.12, not whatever `python3` resolves to), and the files the runtime opens. Run the program the way production starts it, through its smoke or end-to-end test or under `strace -f -e trace=openat` or `LD_DEBUG=libs`, in both images, and compare what it opened. A file the old run opened that the new image lacks is a finding. `ldd` does not see `dlopen`, vendor JSON, or driver directories, so it is not this check. When the image cannot be built or run here, the sibling is unrun: BLOCKED, naming the missing input.
 
 Run each sibling. When it fails, it is a finding. When it holds, record the command that passed and do not add a branch for it.
 
 The walk is the whole set the condition's statement touches, not the names the diff already wrote down. A list of keys, methods, headers, or strings stands for every name that same copy, match, or call writes, reads, or accepts. Read the statement and write those names down before changing code. The fields it copies, the methods on the value it writes onto, and the properties that type declares are the list. The names the diff already excludes are not the list. One of those names that is missing from your list means this pass is not empty. If the condition excludes `get` and `set` because a copy replaces them, every other method that copy replaces is a sibling, including a private one, and every name that same copy still writes is a sibling too.
+
+A list whose job is to check or supply every member of a set (a build gate that fails on a missing program or library, the packages or files an image installs or copies, the variables a template must set) is checked against that set. The set is where it lives: what the source and CI run, spawn, open, and read (grep them), and what the old provider shipped (the walk above). A name in that set that the list leaves out is a finding even though the statement does not contain it. Write the set down from those commands before you mutate the list. Lock it with one test that derives the set from where it lives (the CI config, the copy list) and fails when the list misses a member, not one test per name. Mutating it means deleting one member and seeing that test go red.
 
 A type annotation contributes its own name, not the universe of types. `boolean` is one name. Its allows are the values the statement already distinguishes, such as `true` and `false`, plus omission when the property is optional. One rejection of a value outside that type is enough when the suite already has one. `number`, `null`, `string`, `object`, `bigint`, `symbol`, an array, a function, and `void` are not siblings of `boolean` unless the statement or a caller in the diff already passes that value. Do not union one in to see if the suite stays green.
 
@@ -140,7 +147,7 @@ Then mutate every condition. Before each mutation, commit pending fixes so `git 
 ## Review loop
 
 1. Run a review pass, sibling walk included.
-2. Do every finding: change the code on the pull request branch, or run the named check and record the result.
+2. Do every finding: change the code on the pull request branch, or run the named check and record the result. A finding is a kind of mistake, not one line: before fixing it, search the whole diff for the same mistake (the same masked failure: `|| true`, a command earlier in a pipeline without `pipefail`, `2>/dev/null` on a check; the same missing name; the same unchecked path) and fix every instance in the same commit.
 3. Commit and push the changes:
    - Run the test files the diff changes and the tests that import the changed modules, through `run.sh`. If unsure which, run the package's full test command. A failing test is a finding: fix it before committing.
    - Stage by path, never `git add -A`. Commit with a message that names what the pass found, through `<skill-dir>/scripts/run.sh commit git commit -m <message>`, so the output of the project's commit hooks is capped too.
@@ -160,7 +167,7 @@ A pass that correctly says the code is already clean is empty. Do not invent a s
 
 ## Exit
 
-DONE only when both are true, in this order: a review pass is empty, and the simplification pass after it is empty. DONE is false when any sibling of a condition this run walked is unnamed, unrun, or set aside. DONE is false when any name on the list is missing, or is left allowed without a test that goes red when that name is banned. The list is the names the statement contains, including the names it leaves allowed. A type annotation is one name. Finish that list in this run. A later run finding a name that was on the list means this run stopped early. A later run that only names a type or spelling the statement does not contain must not change the diff, and it is not evidence this run stopped early. If any simplification landed since the last empty review pass, go back to the review loop. On DONE, go to Autopilot. If a goal tool armed the objective, mark that goal complete when Autopilot ends, and not before. On BLOCKED, close or fail the goal with the reason, so it does not keep the run going.
+DONE only when both are true, in this order: a review pass is empty, and the simplification pass after it is empty. DONE is false when any sibling of a condition this run walked is unnamed, unrun, or set aside. DONE is false when any name on the list is missing, or is left allowed without a test that goes red when that name is banned. The list is the names the statement contains, including the names it leaves allowed, and for a list whose job is to check or supply every member of a set, every member of that set. A type annotation is one name. Finish that list in this run. A later run finding a name that was on the list means this run stopped early. A later run that only names a type or spelling the statement does not contain must not change the diff, and it is not evidence this run stopped early. If any simplification landed since the last empty review pass, go back to the review loop. On DONE, go to Autopilot. If a goal tool armed the objective, mark that goal complete when Autopilot ends, and not before. On BLOCKED, close or fail the goal with the reason, so it does not keep the run going.
 
 The objective block and Sibling walk list what is not an exit. Stop as BLOCKED when:
 
