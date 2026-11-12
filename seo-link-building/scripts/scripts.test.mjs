@@ -189,6 +189,7 @@ for (const [name, link, expected, file = 'src/content/blog/post.md'] of [
   ['a dead link around an image and text', '[![i](/img/a.png) More](/nowhere)', [RESOLVE_CHECK]],
   ['a dead relative link', '[rel](../nowhere)', [RESOLVE_CHECK]],
   ['an absolute link to the bare own domain', '<a href="https://a.test">home</a>', [ABSOLUTE_CHECK]],
+  ['an absolute link with a hash after the bare domain', '[f](https://a.test#top)', [ABSOLUTE_CHECK]],
   ['an absolute reference definition', '[ref]: https://a.test/pricing', [ABSOLUTE_CHECK]],
   ['an absolute template-literal href', '<a href={`https://a.test/pricing`}>x</a>', [ABSOLUTE_CHECK], 'src/components/card.jsx'],
   ['a link to a static redirect', '[old](/old-home)', [REDIRECT_CHECK]],

@@ -157,7 +157,8 @@ export const extractTargets = (source, { markdown = false } = {}) => {
 const classify = (target, route) => {
   if (INTERPOLATED.test(target) || target.startsWith('#')) return null
   if (OWN_ORIGIN.test(target)) {
-    return { link: target.replace(OWN_ORIGIN, '') || '/', absolute: true }
+    const suffix = target.replace(OWN_ORIGIN, '')
+    return { link: suffix.startsWith('/') ? suffix : `/${suffix}`, absolute: true }
   }
   if (EXTERNAL.test(target)) return null
   if (target.startsWith('/')) return { link: target, absolute: false }
@@ -213,6 +214,7 @@ test('link extraction handles the shapes that hide links', () => {
   assert.deepEqual(linksIn('[a](//cdn.test/x)'), [])
   assert.deepEqual(linksIn(`<a href="https://${SITE_HOST}/pricing">`), ['/pricing'])
   assert.deepEqual(linksIn(`<a href="https://${SITE_HOST}">`), ['/'])
+  assert.deepEqual(linksIn(`[f](https://${SITE_HOST}#features) [q](https://${SITE_HOST}?ref=x)`), ['/#features', '/?ref=x'])
   assert.deepEqual(linksIn(`[ref]: https://www.${SITE_HOST}/pricing`), ['/pricing'])
   assert.deepEqual(linksIn('  [ref]: /pricing'), ['/pricing'])
   assert.deepEqual(linksIn("href: '/pricing'"), ['/pricing'])
