@@ -362,7 +362,7 @@ Result: `{ isFulfilled, value, logging, profiling }`. A throw still resolves: `i
 | --- | --- | --- |
 | Timeout | 15s | 60s |
 | Memory | 64 MB | 128 MB |
-| Code size | 1024 bytes | unlimited |
+| Code size | 5120 bytes | unlimited |
 | Concurrency | 1 per IP | unlimited |
 | Outgoing requests | same origin only | unrestricted |
 
