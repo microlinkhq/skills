@@ -130,7 +130,7 @@ export const branchName = ref => ref.replace(new RegExp(`^(remotes/)?${REMOTE}/`
 const refsHolding = (repo, hash) => {
   const refs = git(repo, ['for-each-ref', '--format=%(refname)', '--contains', hash, 'refs/heads', `refs/remotes/${REMOTE}`])
     .split('\n')
-    .filter(ref => ref && ref !== `refs/remotes/${REMOTE}/HEAD`)
+    .filter(Boolean)
   return {
     pushed: [...new Set(refs.filter(ref => ref.startsWith('refs/remotes/')).map(ref => ref.slice(`refs/remotes/${REMOTE}/`.length)))],
     local: [...new Set(refs.filter(ref => ref.startsWith('refs/heads/')).map(ref => ref.slice('refs/heads/'.length)))]
@@ -159,19 +159,21 @@ export const collectRepo = (repo, { since, until, authors }) => {
   ])
   if (!log) return []
 
+  const ends = new Date(`${until}T00:00:00`).getTime()
   const base = defaultBranch(repo)
   const remote = webUrl(git(repo, ['remote', 'get-url', REMOTE]))
   const landed = new Map()
   const isLanded = branch => {
-    if (!landed.has(branch)) landed.set(branch, Boolean(base) && mergeAddsNothing(repo, branch, base))
+    if (!landed.has(branch)) landed.set(branch, mergeAddsNothing(repo, branch, base))
     return landed.get(branch)
   }
   const byKey = new Map()
 
   for (const line of log.split('\n')) {
     const [hash, committedAt, subject] = line.split(FIELD)
+    if (new Date(committedAt).getTime() >= ends) continue
     if (isNoise(subject)) continue
-    const onBase = Boolean(base) && succeeds(repo, ['merge-base', '--is-ancestor', hash, base])
+    const onBase = succeeds(repo, ['merge-base', '--is-ancestor', hash, base])
     const holding = onBase ? { pushed: [], local: [] } : refsHolding(repo, hash)
     const merged = onBase || holding.pushed.some(isLanded)
     const commit = {
@@ -188,9 +190,13 @@ export const collectRepo = (repo, { since, until, authors }) => {
       byKey.set(key, commit)
       continue
     }
-    if (commit.merged && !seen.merged) byKey.set(key, { ...commit, subject: pullRequestNumber(subject) ? subject : seen.subject })
-    else if (!commit.merged && !seen.merged) seen.branches = [...new Set([...seen.branches, ...commit.branches])]
-    else if (pullRequestNumber(subject) && !pullRequestNumber(seen.subject)) seen.subject = subject
+    if (commit.merged && !seen.merged) {
+      byKey.set(key, { ...commit, subject: pullRequestNumber(subject) ? subject : seen.subject })
+    } else if (!commit.merged && !seen.merged) {
+      seen.branches = [...new Set([...seen.branches, ...commit.branches])]
+    }
+    const kept = byKey.get(key)
+    if (kept === seen && pullRequestNumber(subject) && !pullRequestNumber(kept.subject)) kept.subject = subject
   }
 
   return [...byKey.values()]
@@ -210,7 +216,14 @@ export const mergeClones = repos => {
     for (const commit of repo.commits) {
       const index = seen.commits.findIndex(existing => dedupeKey(existing.subject) === dedupeKey(commit.subject))
       if (index === -1) seen.commits.push(commit)
-      else if (commit.merged && !seen.commits[index].merged) seen.commits[index] = commit
+      else if (commit.merged && !seen.commits[index].merged) {
+        const kept = seen.commits[index]
+        const subject = pullRequestNumber(commit.subject) ? commit.subject : kept.subject
+        seen.commits[index] = { ...commit, subject, review: pullRequestNumber(commit.subject) ? commit.review : kept.review }
+      } else if (pullRequestNumber(commit.subject) && !pullRequestNumber(seen.commits[index].subject)) {
+        seen.commits[index].subject = commit.subject
+        seen.commits[index].review = commit.review
+      }
     }
     seen.commits.sort(byDateThenSubject)
   }
@@ -365,7 +378,8 @@ const main = async argv => {
   return 0
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+const entry = process.argv[1]
+if (entry && import.meta.url === pathToFileURL(entry).href) {
   try {
     process.exitCode = await main(process.argv.slice(2))
   } catch (error) {

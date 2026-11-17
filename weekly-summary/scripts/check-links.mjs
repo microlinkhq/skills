@@ -64,6 +64,7 @@ const main = async urls => {
   return results.every(result => result.ok) ? 0 : 1
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+const entry = process.argv[1]
+if (entry && import.meta.url === pathToFileURL(entry).href) {
   process.exitCode = await main(process.argv.slice(2))
 }

@@ -1,11 +1,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { execFileSync, spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { execFile, execFileSync, spawnSync } from 'node:child_process'
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+import { promisify } from 'node:util'
 
 import {
   branchName,
@@ -37,23 +38,22 @@ const withTempDir = async run => {
   }
 }
 
-const makeRepo = (root, name, remote) => {
+const makeRepo = (root, name, remote, defaultBranch = 'main') => {
   const repo = path.join(root, name)
   mkdirSync(repo)
   const run = (args, env = {}) =>
     execFileSync('git', args, { cwd: repo, encoding: 'utf8', env: { ...process.env, ...env } }).trim()
-  run(['init', '-q', '-b', 'main'])
+  run(['init', '-q', '-b', defaultBranch])
   run(['config', 'commit.gpgsign', 'false'])
   run(['config', 'user.name', ME])
   run(['config', 'user.email', MY_EMAIL])
   run(['remote', 'add', 'origin', remote])
 
-  const commit = (subject, date, { author = ME, keepStaged = false, file = 'file.txt' } = {}) => {
+  const commit = (subject, date, { author = ME, keepStaged = false, file = 'file.txt', stamp = `${date}T12:00:00Z` } = {}) => {
     if (!keepStaged) {
       writeFileSync(path.join(repo, file), `${subject}\n`)
       run(['add', file])
     }
-    const stamp = `${date}T12:00:00Z`
     run(['commit', '-q', '-m', subject], {
       GIT_AUTHOR_NAME: author,
       GIT_AUTHOR_EMAIL: author === ME ? MY_EMAIL : 'else@example.com',
@@ -65,13 +65,13 @@ const makeRepo = (root, name, remote) => {
   }
   const push = branch => {
     run(['update-ref', `refs/remotes/origin/${branch}`, `refs/heads/${branch}`])
-    if (branch === 'main') run(['symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/remotes/origin/main'])
+    if (branch === defaultBranch) run(['symbolic-ref', 'refs/remotes/origin/HEAD', `refs/remotes/origin/${defaultBranch}`])
   }
   const squashInto = (branch, subject, date) => {
-    run(['switch', '-q', 'main'])
+    run(['switch', '-q', defaultBranch])
     run(['merge', '-q', '--squash', branch])
     commit(subject, date, { keepStaged: true })
-    push('main')
+    push(defaultBranch)
   }
   return { repo, run, commit, push, squashInto }
 }
@@ -317,13 +317,18 @@ test('parseArgs reads flags and rejects impossible or reversed dates', () => {
   assert.throws(() => parseArgs(['--since', '11/10/2026']), /--since/)
   assert.throws(() => parseArgs(['--since', '2026-13-45']), /--since/)
   assert.throws(() => parseArgs(['--since', '2026-11-10', '--until', '2026-02-30']), /--until/)
+  assert.throws(() => parseArgs(['--since', '2026-11-10', '--until', '2026-11-10']), /before --until/)
   assert.throws(() => parseArgs(['--since', '2026-11-17', '--until', '2026-11-10']), /before --until/)
+  const today = new Date()
+  const pad = number => String(number).padStart(2, '0')
+  assert.equal(parseArgs(['--since', '2020-01-01']).until, `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`)
+  assert.equal(parseArgs(['--since', '2026-11-10', '--until', '2026-11-17', '--root', 'repos']).root, path.resolve('repos'))
   assert.throws(() => parseArgs(['--since', '2026-11-10', '--nope']), /unknown argument/)
   assert.throws(() => parseArgs(['--since']), /needs a value/)
 })
 
 test('isNoise drops releases, dependency bumps and data updates, keeps real work', () => {
-  for (const subject of ['chore(release): 3.97.3', 'chore(deps): update x', 'build(deps): bump jsdom', 'build(deps-dev): bump y', 'build(update): emails', 'build: contributors', "Merge branch 'main'"]) {
+  for (const subject of ['chore(release): 3.97.3', 'chore: release 1.2.0', 'chore(deps): update x', 'build(deps): bump jsdom', 'build(deps-dev): bump y', 'build(update): emails', 'build: contributors', "Merge branch 'main'", 'Merge pull request #9 from a/b', "Merge remote-tracking branch 'origin/main'"]) {
     assert.equal(isNoise(subject), true, subject)
   }
   for (const subject of ['build: update dependencies and collapse duplicate versions', 'feat(cluster): take adobe-citations live', 'chore(skills): triage findings']) {
@@ -333,8 +338,10 @@ test('isNoise drops releases, dependency bumps and data updates, keeps real work
 
 test('pullRequestNumber and dedupeKey read a trailing (#N) only', () => {
   assert.equal(pullRequestNumber('feat: x (#2404)'), 2404)
+  assert.equal(pullRequestNumber('feat: x  (#2404) '), 2404)
   assert.equal(pullRequestNumber('fix: see #12 for context'), null)
   assert.equal(dedupeKey('feat: x (#2404)'), 'feat: x')
+  assert.equal(dedupeKey('feat: x  (#2404) '), 'feat: x')
   assert.equal(dedupeKey('fix: see #12 for context'), 'fix: see #12 for context')
 })
 
@@ -342,11 +349,17 @@ test('webUrl, isGitLab and branchName read remotes and refs', () => {
   assert.equal(webUrl('git@github.com:microlinkhq/skills.git'), 'https://github.com/microlinkhq/skills')
   assert.equal(webUrl('https://github.com/Kikobeats/splashy.git'), 'https://github.com/Kikobeats/splashy')
   assert.equal(webUrl('ssh://git@gitlab.com:22/group/sub/project.git'), 'https://gitlab.com/group/sub/project')
+  assert.equal(webUrl('http://github.com/acme/api.git'), 'https://github.com/acme/api')
+  assert.equal(webUrl('git@github.com:acme/api'), 'https://github.com/acme/api')
+  assert.equal(webUrl('https://github.com/acme/api.git/'), 'https://github.com/acme/api')
+  assert.equal(webUrl('https://git@github.com/acme/api.git'), 'https://github.com/acme/api')
+  assert.equal(webUrl('ssh://git@gitlab.com/group/sub/project.git'), 'https://gitlab.com/group/sub/project')
   assert.equal(webUrl(''), null)
   assert.equal(isGitLab('https://gitlab.com/a/b'), true)
   assert.equal(isGitLab('https://code.gitlab.example.org/a/b'), true)
   assert.equal(isGitLab('https://github.example.com/a/b'), false)
   assert.equal(branchName('origin/Kikobeats/input'), 'Kikobeats/input')
+  assert.equal(branchName('remotes/origin/me/fix'), 'me/fix')
   assert.equal(branchName('mr/2043'), 'mr/2043')
 })
 
@@ -377,12 +390,20 @@ test('checkLinks follows redirects, flags non-2xx answers and sign-in walls', ()
   ))
 
 test('checkLinks reports an unreachable host as a failure', async () => {
-  const [result] = await checkLinks(['http://127.0.0.1:1/'])
-  assert.deepEqual([result.ok, result.status], [false, 0])
+  const [badPort] = await checkLinks(['http://127.0.0.1:1/'])
+  assert.deepEqual([badPort.ok, badPort.status, badPort.reason], [false, 0, 'TypeError'])
+  const server = createServer()
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
+  const port = server.address().port
+  await new Promise(resolve => server.close(resolve))
+  const [refused] = await checkLinks([`http://127.0.0.1:${port}/`])
+  assert.equal(refused.reason, 'ECONNREFUSED')
 })
 
 test('probeUrl checks npm packages through the registry, which answers bots', () => {
   assert.equal(probeUrl('https://www.npmjs.com/package/splashy'), 'https://registry.npmjs.org/splashy')
+  assert.equal(probeUrl('https://npmjs.com/package/splashy'), 'https://registry.npmjs.org/splashy')
+  assert.equal(probeUrl('https://www.npmjs.com/package/splashy/'), 'https://registry.npmjs.org/splashy')
   assert.equal(probeUrl('https://www.npmjs.com/package/@microlink/mql'), 'https://registry.npmjs.org/@microlink%2Fmql')
   assert.equal(probeUrl('https://microlink.io/blog'), 'https://microlink.io/blog')
 })
@@ -412,3 +433,423 @@ test('upload sends the file with every returned header and fails without an imag
       }
     )
   ))
+
+test('the range includes a commit at since midnight and excludes one at until midnight', () =>
+  withTempDir(root => {
+    const repo = makeRepo(root, 'edge', 'git@github.com:acme/edge.git')
+    repo.commit('at since midnight', '2026-11-10', { stamp: '2026-11-10T00:00:00' })
+    repo.commit('at until midnight', '2026-11-17', { stamp: '2026-11-17T00:00:00' })
+    repo.push('main')
+    const subjects = collect({ root, ...range })[0].commits.map(commit => commit.subject)
+    assert.deepEqual(subjects, ['at since midnight'])
+  }))
+
+test('origin/HEAD is the default branch when it is not main', () =>
+  withTempDir(root => {
+    const repo = makeRepo(root, 'app', 'git@github.com:acme/app.git')
+    repo.commit('feat: base', '2026-11-09')
+    repo.push('main')
+    repo.run(['switch', '-q', '-c', 'develop'])
+    repo.commit('feat: on develop', '2026-11-12', { file: 'dev.txt' })
+    repo.push('develop')
+    repo.run(['switch', '-q', 'main'])
+    repo.commit('feat: only on main', '2026-11-13', { file: 'main.txt' })
+    repo.push('main')
+    repo.run(['symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/remotes/origin/develop'])
+    const commits = collect({ root, ...range })[0].commits
+    const state = subject => {
+      const commit = commits.find(item => item.subject === subject)
+      return [commit.merged, commit.unpushed]
+    }
+    assert.deepEqual(state('feat: on develop'), [true, false])
+    assert.deepEqual(state('feat: only on main'), [false, false])
+  }))
+
+test('origin/master is the default branch when origin/HEAD is absent', () =>
+  withTempDir(root => {
+    const repo = makeRepo(root, 'legacy', 'git@github.com:acme/legacy.git', 'master')
+    repo.commit('feat: on master', '2026-11-12')
+    repo.push('master')
+    repo.run(['symbolic-ref', '-d', 'refs/remotes/origin/HEAD'])
+    const commit = collect({ root, ...range })[0].commits[0]
+    assert.deepEqual([commit.merged, commit.branches], [true, []])
+  }))
+
+test('unmerged copies of one subject keep every branch and the request number', () =>
+  withTempDir(root => {
+    const repo = makeRepo(root, 'site', 'git@github.com:acme/site.git')
+    repo.commit('feat: base', '2026-11-09')
+    repo.push('main')
+    repo.run(['switch', '-q', '-c', 'me/old'])
+    repo.commit('feat: shared (#4)', '2026-11-11', { file: 'old.txt' })
+    repo.push('me/old')
+    repo.run(['switch', '-q', 'main'])
+    repo.run(['switch', '-q', '-c', 'me/new'])
+    repo.commit('feat: shared', '2026-11-12', { file: 'new.txt' })
+    repo.push('me/new')
+    const commit = collect({ root, ...range })[0].commits.find(item => item.subject.startsWith('feat: shared'))
+    assert.equal(commit.merged, false)
+    assert.deepEqual(commit.branches.sort(), ['me/new', 'me/old'])
+    assert.equal(commit.review, 'https://github.com/acme/site/pull/4')
+  }))
+
+test('a squash without a request number keeps the number from the branch commit', () =>
+  withTempDir(root => {
+    const repo = makeRepo(root, 'site', 'git@github.com:acme/site.git')
+    repo.commit('feat: base', '2026-11-09')
+    repo.push('main')
+    repo.run(['switch', '-q', '-c', 'me/steps'])
+    repo.commit('feat: shared (#4)', '2026-11-11', { file: 'a.txt' })
+    repo.push('me/steps')
+    repo.squashInto('me/steps', 'feat: shared', '2026-11-13')
+    const commit = collect({ root, ...range })[0].commits.find(item => item.subject.startsWith('feat: shared'))
+    assert.equal(commit.merged, true)
+    assert.equal(commit.subject, 'feat: shared (#4)')
+    assert.equal(commit.review, 'https://github.com/acme/site/pull/4')
+  }))
+
+test('a merged copy keeps the request number written on the newer unmerged copy', () =>
+  withTempDir(root => {
+    const repo = makeRepo(root, 'site', 'git@github.com:acme/site.git')
+    repo.commit('feat: shared', '2026-11-11')
+    repo.push('main')
+    repo.run(['switch', '-q', '-c', 'me/new'])
+    repo.commit('feat: shared (#4)', '2026-11-12', { file: 'new.txt' })
+    repo.push('me/new')
+    const commit = collect({ root, ...range })[0].commits.find(item => item.subject.startsWith('feat: shared'))
+    assert.equal(commit.merged, true)
+    assert.equal(commit.subject, 'feat: shared (#4)')
+  }))
+
+test('clones keep the merged copy and a request number from either side', () =>
+  withTempDir(root => {
+    const first = makeRepo(root, 'site', 'git@github.com:acme/site.git')
+    first.commit('feat: base', '2026-11-09')
+    first.push('main')
+    first.run(['switch', '-q', '-c', 'me/wip'])
+    first.commit('feat: landed elsewhere', '2026-11-12', { file: 'wip.txt' })
+    first.push('me/wip')
+    first.run(['switch', '-q', 'main'])
+    first.commit('feat: numbered', '2026-11-11', { file: 'num.txt' })
+    first.push('main')
+    const second = makeRepo(root, 'site-copy', 'https://github.com/acme/site.git')
+    second.commit('feat: landed elsewhere', '2026-11-12')
+    second.commit('feat: numbered (#8)', '2026-11-13', { file: 'num.txt' })
+    second.push('main')
+    const commits = collect({ root, ...range })[0].commits
+    const landed = commits.find(commit => commit.subject.startsWith('feat: landed'))
+    const numbered = commits.find(commit => commit.subject.startsWith('feat: numbered'))
+    assert.equal(landed.merged, true)
+    assert.equal(numbered.subject, 'feat: numbered (#8)')
+    assert.equal(numbered.review, 'https://github.com/acme/site/pull/8')
+  }))
+
+test('resolveReviews treats a merged request without a time as landed only once it is pushed', async () => {
+  const repos = [{
+    name: 'site',
+    url: 'https://github.com/acme/site',
+    commits: [
+      pendingCommit('feat: pushed', ['me/pushed']),
+      { ...pendingCommit('feat: still local', ['me/local-after']), unpushed: true },
+      { ...pendingCommit('feat: on master', ['master']), unpushed: true }
+    ]
+  }]
+  const asked = []
+  await resolveReviews(repos, async (url, branch) => {
+    asked.push(branch)
+    return { state: 'merged', url: `https://github.com/acme/site/pull/${branch}`, mergedAt: null }
+  })
+  assert.deepEqual(asked.sort(), ['me/local-after', 'me/pushed'])
+  assert.equal(repos[0].commits[0].merged, true)
+  assert.equal(repos[0].commits[1].merged, false)
+  assert.equal(repos[0].commits[2].merged, false)
+})
+
+test('resolveReviews asks the forge with a capped number of lookups at once', async () => {
+  const branches = Array.from({ length: 10 }, (_, index) => `me/${index}`)
+  const repos = [{
+    name: 'site',
+    url: 'https://github.com/acme/site',
+    commits: branches.map(branch => pendingCommit(branch, [branch]))
+  }]
+  let inflight = 0
+  let max = 0
+  let timer
+  let release
+  const gate = new Promise(resolve => { release = resolve })
+  await resolveReviews(repos, async () => {
+    inflight += 1
+    max = Math.max(max, inflight)
+    clearTimeout(timer)
+    timer = setTimeout(release, 30)
+    await gate
+    inflight -= 1
+    return null
+  })
+  assert.equal(max, 6)
+})
+
+const execFileAsync = promisify(execFile)
+
+const runCli = (script, args, env = {}) =>
+  spawnSync(process.execPath, [path.join(HERE, script), ...args], { encoding: 'utf8', env: { ...process.env, ...env } })
+
+const runCliAsync = async (script, args, env = {}) => {
+  try {
+    const result = await execFileAsync(process.execPath, [path.join(HERE, script), ...args], { encoding: 'utf8', env: { ...process.env, ...env } })
+    return { status: 0, stdout: result.stdout, stderr: result.stderr }
+  } catch (error) {
+    return { status: error.code, stdout: error.stdout ?? '', stderr: error.stderr ?? '' }
+  }
+}
+
+test('the collect CLI prints help, defaults the author, and can stay offline or emit JSON', () =>
+  withTempDir(root => {
+    const help = runCli('collect.mjs', ['--help', '--since'])
+    assert.equal(help.status, 0)
+    assert.match(help.stdout, /^Usage:/)
+    const bare = runCli('collect.mjs', [])
+    assert.equal(bare.status, 1)
+    assert.match(bare.stdout, /^Usage:/)
+    seedWorkspace(root)
+    const config = path.join(root, 'gitconfig')
+    const offlineArgs = ['--root', root, '--since', '2026-11-10', '--until', '2026-11-17', '--offline']
+    writeFileSync(config, '')
+    const missing = runCli('collect.mjs', offlineArgs, { GIT_CONFIG_GLOBAL: config, GIT_CONFIG_NOSYSTEM: '1' })
+    assert.equal(missing.status, 1)
+    assert.match(missing.stderr, /no --author/)
+    writeFileSync(config, '[user]\n\temail = me+work@example.com\n')
+    const byEmail = runCli('collect.mjs', offlineArgs, { GIT_CONFIG_GLOBAL: config, GIT_CONFIG_NOSYSTEM: '1' })
+    assert.equal(byEmail.status, 0, byEmail.stderr)
+    assert.match(byEmail.stdout, /feat: cache values with brotli/)
+    writeFileSync(config, '[user]\n\tname = Weekly Tester\n')
+    const byName = runCli('collect.mjs', offlineArgs, { GIT_CONFIG_GLOBAL: config, GIT_CONFIG_NOSYSTEM: '1' })
+    assert.match(byName.stdout, /feat: metadata monitor/)
+    const bin = path.join(root, 'bin')
+    mkdirSync(bin)
+    const gh = path.join(bin, 'gh')
+    writeFileSync(gh, '#!/bin/sh\necho fail >&2\nexit 1\n')
+    chmodSync(gh, 0o755)
+    const env = { PATH: `${bin}${path.delimiter}${process.env.PATH}` }
+    const offline = runCli('collect.mjs', ['--root', root, '--since', '2026-11-10', '--until', '2026-11-17', '--author', ME, '--offline'], env)
+    assert.equal(offline.status, 0, offline.stderr)
+    assert.doesNotMatch(offline.stderr, /lookup failed/)
+    const online = runCli('collect.mjs', ['--root', root, '--since', '2026-11-10', '--until', '2026-11-17', '--author', ME], env)
+    assert.match(online.stderr, /lookup failed/)
+    const json = runCli('collect.mjs', ['--root', root, '--since', '2026-11-10', '--until', '2026-11-17', '--author', ME, '--json', '--offline'])
+    assert.equal(JSON.parse(json.stdout)[0].name, 'api')
+  }))
+
+test('lookupReview reads GitHub and GitLab answers, including the branches those commands leave out', () =>
+  withTempDir(dir => {
+    const bin = path.join(dir, 'bin')
+    mkdirSync(bin)
+    const log = path.join(dir, 'log')
+    writeFileSync(log, '')
+    const fake = `#!/usr/bin/env node
+import { appendFileSync } from 'node:fs'
+const command = process.argv[1].endsWith('glab') ? 'glab' : 'gh'
+appendFileSync(process.env.LOOKUP_LOG, command + ' ' + process.argv.slice(2).join(' ') + '\\n')
+process.stdout.write(process.env[command === 'glab' ? 'GLAB_RESPONSE' : 'GH_RESPONSE'] ?? '[]')
+`
+    for (const command of ['gh', 'glab']) {
+      const file = path.join(bin, command)
+      writeFileSync(file, fake)
+      chmodSync(file, 0o755)
+    }
+    const href = pathToFileURL(path.join(HERE, 'collect.mjs')).href
+    const code = `
+import { readFileSync, writeFileSync } from 'node:fs'
+import { lookupReview } from ${JSON.stringify(href)}
+const cases = JSON.parse(readFileSync(0, 'utf8'))
+const results = []
+for (const item of cases) {
+  process.env.GH_RESPONSE = item.gh ?? '[]'
+  process.env.GLAB_RESPONSE = item.glab ?? '[]'
+  writeFileSync(process.env.LOOKUP_LOG, '')
+  results.push({ review: await lookupReview(item.url, item.branch), log: readFileSync(process.env.LOOKUP_LOG, 'utf8') })
+}
+console.log(JSON.stringify(results))
+`
+    const cases = [
+      {
+        url: 'https://github.com/acme/site',
+        branch: 'me/fix',
+        gh: JSON.stringify([
+          { number: 1, state: 'OPEN', url: 'https://github.com/acme/site/pull/1', isCrossRepository: true, mergedAt: '2026-11-01T00:00:00Z' },
+          { number: 2, state: 'MERGED', url: 'https://github.com/acme/site/pull/2', isCrossRepository: false }
+        ])
+      },
+      { url: 'https://github.com/acme/site', branch: 'me/none', gh: '[]' },
+      {
+        url: 'https://gitlab.com/acme/site',
+        branch: 'mr/12',
+        glab: JSON.stringify({ iid: 12, state: 'opened', source_project_id: 5, target_project_id: 5 })
+      },
+      {
+        url: 'https://gitlab.com/acme/site',
+        branch: 'mr/3',
+        glab: JSON.stringify({ iid: 3, state: 'opened', source_project_id: 9, target_project_id: 1, web_url: 'https://gitlab.com/fork/site/-/merge_requests/3' })
+      },
+      {
+        url: 'https://gitlab.com/acme/site',
+        branch: 'me/feat',
+        glab: JSON.stringify([{ iid: 4, state: 'merged', source_project_id: 5, target_project_id: 5, web_url: 'https://gitlab.com/acme/site/-/merge_requests/4', merged_at: '2026-11-13T00:00:00Z' }])
+      },
+      {
+        url: 'https://gitlab.com/acme/site',
+        branch: 'me/closed',
+        glab: JSON.stringify([{ iid: 5, state: 'closed', source_project_id: 5, target_project_id: 5, web_url: 'https://gitlab.com/acme/site/-/merge_requests/5' }])
+      }
+    ]
+    const child = spawnSync(process.execPath, ['--input-type=module', '--eval', code], {
+      input: JSON.stringify(cases),
+      encoding: 'utf8',
+      env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH}`, LOOKUP_LOG: log }
+    })
+    assert.equal(child.status, 0, child.stderr)
+    const [github, empty, view, fork, list, closed] = JSON.parse(child.stdout)
+    assert.deepEqual(github.review, { state: 'merged', url: 'https://github.com/acme/site/pull/2', mergedAt: null })
+    assert.match(github.log, /--limit 5/)
+    assert.match(github.log, /--head me\/fix/)
+    assert.match(github.log, /--repo github.com\/acme\/site/)
+    assert.equal(empty.review, null)
+    assert.deepEqual(view.review, { state: 'open', url: 'https://gitlab.com/acme/site/-/merge_requests/12', mergedAt: null })
+    assert.match(view.log, /mr view 12/)
+    assert.doesNotMatch(view.log, /mr list/)
+    assert.equal(fork.review, null)
+    assert.deepEqual(list.review, { state: 'merged', url: 'https://gitlab.com/acme/site/-/merge_requests/4', mergedAt: '2026-11-13T00:00:00Z' })
+    assert.match(list.log, /mr list/)
+    assert.match(list.log, /--source-branch me\/feat/)
+    assert.equal(closed.review.state, 'closed')
+    assert.equal(closed.review.mergedAt, null)
+  }))
+
+test('checkLinks treats every sign-in path as a wall, and a direct visit as the page itself', () =>
+  withServer(
+    (req, res) => {
+      const walls = { '/app': '/auth/start', '/go': '/sso?next=1', '/menu': '/session', '/in': '/log-in', '/up': '/sign-in', '/join': '/signin' }
+      if (walls[req.url]) return res.writeHead(302, { location: walls[req.url] }).end()
+      res.writeHead(200).end()
+    },
+    async origin => {
+      const results = await checkLinks(['/app', '/go', '/menu', '/in', '/up', '/join'].map(pathname => origin + pathname))
+      assert.deepEqual(results.map(result => result.reason), Array(6).fill('redirects to sign-in'))
+      const [direct] = await checkLinks([`${origin}/login`])
+      assert.equal(direct.ok, true)
+      assert.equal(direct.reason, null)
+    }
+  ))
+
+test('checkLinks caps how many fetches run at once', async () => {
+  let inflight = 0
+  let max = 0
+  let timer
+  let release
+  const gate = new Promise(resolve => { release = resolve })
+  await withServer(
+    (req, res) => {
+      inflight += 1
+      max = Math.max(max, inflight)
+      clearTimeout(timer)
+      timer = setTimeout(release, 50)
+      gate.then(() => {
+        inflight -= 1
+        res.writeHead(200).end()
+      })
+    },
+    async origin => {
+      const results = await checkLinks(Array.from({ length: 12 }, (_, index) => `${origin}/${index}`))
+      assert.equal(results.every(result => result.ok), true)
+      assert.equal(max, 8)
+    }
+  )
+})
+
+test('checkLinks gives up when a host never answers', () =>
+  withServer(
+    req => setTimeout(() => req.destroy(), 21_000),
+    async origin => {
+      const started = Date.now()
+      const outcome = await Promise.race([
+        checkLinks([`${origin}/hang`]).then(results => results[0]),
+        new Promise(resolve => setTimeout(() => resolve('slow'), 20_000))
+      ])
+      assert.notEqual(outcome, 'slow')
+      assert.equal(outcome.reason, 'TimeoutError')
+      assert.ok(Date.now() - started < 20_000)
+    }
+  ))
+
+test('check-links exits 0 for help and a live page, and 1 for no arguments or a failure', () =>
+  withServer(
+    (req, res) => res.writeHead(req.url === '/missing' ? 404 : 200).end(),
+    async origin => {
+      const help = runCli('check-links.mjs', ['--help'])
+      assert.equal(help.status, 0)
+      assert.match(help.stdout, /^Usage:/)
+      const bare = runCli('check-links.mjs', [])
+      assert.equal(bare.status, 1)
+      assert.match(bare.stdout, /^Usage:/)
+      const ok = await runCliAsync('check-links.mjs', [`${origin}/ok`])
+      assert.equal(ok.status, 0, ok.stderr + ok.stdout)
+      assert.match(ok.stdout, /^OK/)
+      const missing = await runCliAsync('check-links.mjs', [`${origin}/missing`])
+      assert.equal(missing.status, 1)
+      assert.match(missing.stdout, /^FAIL/)
+    }
+  ))
+
+test('upload sends each file type, rejects a non-object header list, and rejects an unfinished upload', () =>
+  withTempDir(dir =>
+    withServer(
+      (req, res) => {
+        const chunks = []
+        req.on('data', chunk => chunks.push(chunk))
+        req.on('end', () => {
+          const body = Buffer.concat(chunks).toString('latin1')
+          if (req.url === '/text') {
+            res.writeHead(200, { 'content-type': 'text/plain' })
+            return res.end('nope')
+          }
+          if (req.url === '/pending') {
+            res.writeHead(200, { 'content-type': 'application/json' })
+            return res.end(JSON.stringify({ status: 'pending', markdown_source: 'file-upload://nope' }))
+          }
+          const type = decodeURIComponent(req.url.slice(1))
+          const ok = body.includes(`Content-Type: ${type}`)
+          res.writeHead(ok ? 200 : 400, { 'content-type': 'application/json' })
+          res.end(JSON.stringify(ok ? { status: 'uploaded', markdown_source: 'file-upload://typed' } : { status: 'bad' }))
+        })
+      },
+      async origin => {
+        const file = path.join(dir, 'shot.bin')
+        writeFileSync(file, 'DATA')
+        const headers = JSON.stringify({ authorization: 'Bearer secret' })
+        for (const value of ['[]', 'null', '42', '"x"']) {
+          await assert.rejects(upload(`${origin}/send`, value, file), /upload_headers as JSON/)
+        }
+        for (const [ext, type] of [['.png', 'image/png'], ['.jpg', 'image/jpeg'], ['.jpeg', 'image/jpeg'], ['.webp', 'image/webp'], ['.gif', 'image/gif'], ['.txt', 'application/octet-stream']]) {
+          const image = path.join(dir, `shot${ext}`)
+          writeFileSync(image, 'DATA')
+          assert.equal(await upload(`${origin}/${encodeURIComponent(type)}`, headers, image), '<image source="file-upload://typed" />')
+        }
+        await assert.rejects(upload(`${origin}/text`, headers, file), /upload failed|no markdown_source/)
+        await assert.rejects(upload(`${origin}/pending`, headers, file), /upload failed with 200/)
+      }
+    )
+  ))
+
+test('upload prints usage unless it is given the url, the headers and the file', () => {
+  const bare = runCli('upload.mjs', [])
+  assert.equal(bare.status, 1)
+  assert.match(bare.stdout, /^Usage:/)
+})
+
+test('importing a script with no process entry does not crash', () => {
+  for (const file of ['collect.mjs', 'check-links.mjs', 'upload.mjs']) {
+    const href = pathToFileURL(path.join(HERE, file)).href
+    const child = spawnSync(process.execPath, ['--input-type=module'], { input: `import ${JSON.stringify(href)}\n`, encoding: 'utf8' })
+    assert.equal(child.status, 0, child.stderr)
+  }
+})

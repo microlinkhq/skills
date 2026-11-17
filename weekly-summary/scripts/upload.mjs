@@ -44,7 +44,8 @@ const main = async argv => {
   return 0
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+const entry = process.argv[1]
+if (entry && import.meta.url === pathToFileURL(entry).href) {
   try {
     process.exitCode = await main(process.argv.slice(2))
   } catch (error) {
