@@ -85,6 +85,12 @@ Drives each pull request it is given to an empty code review and an empty simpli
 
 Improve a site's internal linking from Google Search Console data. Guards every internal link with a test (dead links, links to redirects, absolute self-links), finds striking-distance pages (positions 10.5 to 20.5) and low-CTR first-page pages, counts inbound links, and adds contextual links in existing sentences through exact-once scripted edits, shipped as reviewable PRs. Use when the user mentions internal linking, link building, internal link audit, orphan pages, striking distance, Search Console or GSC exports, pages stuck on page two, or wants to apply an "internal link maxxing" playbook to a repo.
 
+### weekly-summary
+
+> `npx -y skills add microlinkhq/skills/weekly-summary`
+
+Fill your section of the team's weekly meeting page in Notion with what you shipped since the last meeting, built from your git commits across every repo in a workspace folder. Groups work by repo, writes one outcome per bullet, links every public page, pull request and package, verifies each link answers 200, and adds screenshots of visual changes. Use when the user invokes /weekly-summary, asks to fill or write their weekly update, weekly meeting notes, "what I did this week" in Notion, or shares a Weekly Meeting page link.
+
 ### youtube-dl-exec
 
 > `npx -y skills add microlinkhq/skills/youtube-dl-exec`
