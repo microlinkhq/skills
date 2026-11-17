@@ -993,13 +993,18 @@ test('an npm package whose name looks like a sign-in page is still the package',
   const href = pathToFileURL(path.join(HERE, 'check-links.mjs')).href
   const code = `
 import { checkLinks } from ${JSON.stringify(href)}
-globalThis.fetch = async () => ({ url: 'https://registry.npmjs.org/login', status: 200, ok: true, body: { cancel: async () => {} } })
+let requested
+globalThis.fetch = async target => {
+  requested = String(target)
+  return { url: 'https://registry.npmjs.org/login', status: 200, ok: true, body: { cancel: async () => {} } }
+}
 const [result] = await checkLinks(['https://www.npmjs.com/package/login'])
-console.log(JSON.stringify(result))
+console.log(JSON.stringify({ result, requested }))
 `
   const child = spawnSync(process.execPath, ['--input-type=module', '--eval', code], { encoding: 'utf8' })
   assert.equal(child.status, 0, child.stderr)
-  const result = JSON.parse(child.stdout)
+  const { result, requested } = JSON.parse(child.stdout)
+  assert.equal(requested, 'https://registry.npmjs.org/login')
   assert.equal(result.ok, true)
   assert.equal(result.reason, null)
 })
