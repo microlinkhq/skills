@@ -130,7 +130,6 @@ export const branchName = ref => ref.replace(new RegExp(`^(remotes/)?${REMOTE}/`
 const refsHolding = (repo, hash) => {
   const refs = git(repo, ['for-each-ref', '--format=%(refname)', '--contains', hash, 'refs/heads', `refs/remotes/${REMOTE}`])
     .split('\n')
-    .filter(Boolean)
   return {
     pushed: [...new Set(refs.filter(ref => ref.startsWith('refs/remotes/')).map(ref => ref.slice(`refs/remotes/${REMOTE}/`.length)))],
     local: [...new Set(refs.filter(ref => ref.startsWith('refs/heads/')).map(ref => ref.slice('refs/heads/'.length)))]
@@ -196,7 +195,7 @@ export const collectRepo = (repo, { since, until, authors }) => {
       seen.branches = [...new Set([...seen.branches, ...commit.branches])]
     }
     const kept = byKey.get(key)
-    if (kept === seen && pullRequestNumber(subject) && !pullRequestNumber(kept.subject)) kept.subject = subject
+    if (pullRequestNumber(subject) && !pullRequestNumber(kept.subject)) kept.subject = subject
   }
 
   return [...byKey.values()]
