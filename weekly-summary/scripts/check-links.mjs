@@ -21,12 +21,13 @@ export const probeUrl = url => {
 
 export const checkLink = async url => {
   try {
-    const response = await fetch(probeUrl(url), { redirect: 'follow', signal: AbortSignal.timeout(TIMEOUT_MS) })
+    const probed = probeUrl(url)
+    const response = await fetch(probed, { redirect: 'follow', signal: AbortSignal.timeout(TIMEOUT_MS) })
     await response.body?.cancel()
     const final = new URL(response.url)
-    const requested = new URL(url)
-    const redirected = final.pathname !== requested.pathname || final.search !== requested.search
-    const signIn = SIGN_IN_PATH.test(final.pathname + final.search) && (redirected || !SIGN_IN_PATH.test(requested.pathname + requested.search))
+    const fetched = new URL(probed)
+    const redirected = final.pathname !== fetched.pathname || final.search !== fetched.search
+    const signIn = SIGN_IN_PATH.test(final.pathname + final.search) && (redirected || !SIGN_IN_PATH.test(fetched.pathname + fetched.search))
     return {
       url,
       status: response.status,

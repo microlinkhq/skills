@@ -861,7 +861,7 @@ test('upload prints usage unless it is given the url, the headers and the file',
 })
 
 test('a pushed copy wins over a newer unpushed copy of the same subject', () =>
-  withTempDir(root => {
+  withTempDir(async root => {
     const repo = makeRepo(root, 'site', 'git@github.com:acme/site.git')
     repo.commit('feat: base', '2026-11-09')
     repo.push('main')
@@ -871,9 +871,14 @@ test('a pushed copy wins over a newer unpushed copy of the same subject', () =>
     repo.run(['switch', '-q', 'main'])
     repo.run(['switch', '-q', '-c', 'me/new'])
     repo.commit('feat: shared', '2026-11-12', { file: 'new.txt' })
-    const commit = collect({ root, ...range })[0].commits.find(item => item.subject === 'feat: shared')
+    const repos = collect({ root, ...range })
+    const commit = repos[0].commits.find(item => item.subject === 'feat: shared')
     assert.equal(commit.unpushed, false)
     assert.deepEqual(commit.branches, ['me/old'])
+    assert.equal(commit.date, '2026-11-11')
+    await resolveReviews(repos, async () => [{ state: 'merged', url: 'https://github.com/acme/site/pull/4', mergedAt: '2026-11-13T00:00:00Z' }])
+    assert.equal(commit.merged, true)
+    assert.equal(commit.review, 'https://github.com/acme/site/pull/4')
   }))
 
 test('clones keep a pushed copy ahead of an unpushed one', () =>
@@ -892,6 +897,7 @@ test('clones keep a pushed copy ahead of an unpushed one', () =>
     const commit = collect({ root, ...range })[0].commits.find(item => item.subject === 'feat: shared')
     assert.equal(commit.unpushed, false)
     assert.deepEqual(commit.branches, ['me/topic'])
+    assert.equal(commit.date, '2026-11-11')
   }))
 
 test('an older unpushed copy does not join a pushed copy of the same subject', () =>
@@ -979,6 +985,21 @@ test('resolveReviews keeps an older merge when the branch has a newer open reque
   const [landed, next] = repos[0].commits
   assert.deepEqual([landed.merged, landed.review], [true, 'https://github.com/acme/site/pull/4'])
   assert.deepEqual([next.merged, next.open, next.review], [false, true, 'https://github.com/acme/site/pull/9'])
+})
+
+test('an npm package whose name looks like a sign-in page is still the package', () => {
+  const href = pathToFileURL(path.join(HERE, 'check-links.mjs')).href
+  const code = `
+import { checkLinks } from ${JSON.stringify(href)}
+globalThis.fetch = async () => ({ url: 'https://registry.npmjs.org/login', status: 200, ok: true, body: { cancel: async () => {} } })
+const [result] = await checkLinks(['https://www.npmjs.com/package/login'])
+console.log(JSON.stringify(result))
+`
+  const child = spawnSync(process.execPath, ['--input-type=module', '--eval', code], { encoding: 'utf8' })
+  assert.equal(child.status, 0, child.stderr)
+  const result = JSON.parse(child.stdout)
+  assert.equal(result.ok, true)
+  assert.equal(result.reason, null)
 })
 
 test('importing a script with no process entry does not crash', () => {

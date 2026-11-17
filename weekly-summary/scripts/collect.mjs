@@ -85,6 +85,9 @@ const sameWork = (seen, commit) => {
   if (seen.unpushed && !commit.unpushed) {
     seen.unpushed = false
     seen.branches = [...commit.branches]
+    seen.hash = commit.hash
+    seen.date = commit.date
+    seen.committedAt = commit.committedAt
   } else if (Boolean(seen.unpushed) === Boolean(commit.unpushed)) {
     seen.branches = [...new Set([...seen.branches, ...commit.branches])]
   }
