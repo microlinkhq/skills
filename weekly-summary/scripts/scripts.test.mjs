@@ -871,7 +871,7 @@ test('a pushed copy wins over a newer unpushed copy of the same subject', () =>
     const pushedHash = repo.run(['rev-parse', 'HEAD'])
     repo.run(['switch', '-q', 'main'])
     repo.run(['switch', '-q', '-c', 'me/new'])
-    repo.commit('feat: shared', '2026-11-12', { file: 'new.txt' })
+    repo.commit('feat: shared', '2026-11-15', { file: 'new.txt' })
     const repos = collect({ root, ...range })
     const commit = repos[0].commits.find(item => item.subject === 'feat: shared')
     assert.equal(commit.unpushed, false)
