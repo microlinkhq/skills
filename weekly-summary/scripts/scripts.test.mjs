@@ -13,6 +13,7 @@ import {
   collect,
   collectionFailures,
   dedupeKey,
+  mergeClones,
   isGitLab,
   isNoise,
   parseArgs,
@@ -678,7 +679,8 @@ console.log(JSON.stringify(results))
         branch: 'me/fix',
         gh: JSON.stringify([
           { number: 1, state: 'OPEN', url: 'https://github.com/acme/site/pull/1', isCrossRepository: true, mergedAt: '2026-11-01T00:00:00Z' },
-          { number: 2, state: 'MERGED', url: 'https://github.com/acme/site/pull/2', isCrossRepository: false }
+          { number: 2, state: 'MERGED', url: 'https://github.com/acme/site/pull/2', isCrossRepository: false },
+          { number: 9, state: 'OPEN', url: 'https://github.com/acme/site/pull/9', isCrossRepository: false }
         ])
       },
       { url: 'https://github.com/acme/site', branch: 'me/none', gh: '[]' },
@@ -695,7 +697,11 @@ console.log(JSON.stringify(results))
       {
         url: 'https://gitlab.com/acme/site',
         branch: 'me/feat',
-        glab: JSON.stringify([{ iid: 4, state: 'merged', source_project_id: 5, target_project_id: 5, web_url: 'https://gitlab.com/acme/site/-/merge_requests/4', merged_at: '2026-11-13T00:00:00Z' }])
+        glab: JSON.stringify([
+          { source_project_id: 5, target_project_id: 5 },
+          { iid: 4, state: 'merged', source_project_id: 5, target_project_id: 5, web_url: 'https://gitlab.com/acme/site/-/merge_requests/4', merged_at: '2026-11-13T00:00:00Z' },
+          { iid: 8, state: 'opened', source_project_id: 5, target_project_id: 5, web_url: 'https://gitlab.com/acme/site/-/merge_requests/8' }
+        ])
       },
       {
         url: 'https://gitlab.com/acme/site',
@@ -710,7 +716,10 @@ console.log(JSON.stringify(results))
     })
     assert.equal(child.status, 0, child.stderr)
     const [github, empty, view, fork, list, closed] = JSON.parse(child.stdout)
-    assert.deepEqual(github.review, [{ state: 'merged', url: 'https://github.com/acme/site/pull/2', mergedAt: null }])
+    assert.deepEqual(github.review, [
+      { state: 'merged', url: 'https://github.com/acme/site/pull/2', mergedAt: null },
+      { state: 'open', url: 'https://github.com/acme/site/pull/9', mergedAt: null }
+    ])
     assert.match(github.log, /--limit 5/)
     assert.match(github.log, /--head me\/fix/)
     assert.match(github.log, /--repo github.com\/acme\/site/)
@@ -719,7 +728,10 @@ console.log(JSON.stringify(results))
     assert.match(view.log, /mr view 12/)
     assert.doesNotMatch(view.log, /mr list/)
     assert.deepEqual(fork.review, [])
-    assert.deepEqual(list.review, [{ state: 'merged', url: 'https://gitlab.com/acme/site/-/merge_requests/4', mergedAt: '2026-11-13T00:00:00Z' }])
+    assert.deepEqual(list.review, [
+      { state: 'merged', url: 'https://gitlab.com/acme/site/-/merge_requests/4', mergedAt: '2026-11-13T00:00:00Z' },
+      { state: 'open', url: 'https://gitlab.com/acme/site/-/merge_requests/8', mergedAt: null }
+    ])
     assert.match(list.log, /mr list/)
     assert.match(list.log, /--source-branch me\/feat/)
     assert.equal(closed.review[0].state, 'closed')
@@ -729,12 +741,12 @@ console.log(JSON.stringify(results))
 test('checkLinks treats every sign-in path as a wall, and a direct visit as the page itself', () =>
   withServer(
     (req, res) => {
-      const walls = { '/app': '/auth/start', '/go': '/sso?next=1', '/menu': '/session', '/in': '/log-in', '/up': '/sign-in', '/join': '/signin', '/auth/dashboard': '/login' }
+      const walls = { '/app': '/auth/start', '/go': '/sso?next=1', '/menu': '/session', '/in': '/log-in', '/up': '/sign-in', '/join': '/signin', '/auth/dashboard': '/login', '/login?from=app': '/login?next=1' }
       if (walls[req.url]) return res.writeHead(302, { location: walls[req.url] }).end()
       res.writeHead(200).end()
     },
     async origin => {
-      const paths = ['/app', '/go', '/menu', '/in', '/up', '/join', '/auth/dashboard']
+      const paths = ['/app', '/go', '/menu', '/in', '/up', '/join', '/auth/dashboard', '/login?from=app']
       const results = await checkLinks(paths.map(pathname => origin + pathname))
       assert.deepEqual(results.map(result => result.reason), Array(paths.length).fill('redirects to sign-in'))
       const [direct] = await checkLinks([`${origin}/login`])
@@ -882,13 +894,73 @@ test('clones keep a pushed copy ahead of an unpushed one', () =>
     assert.deepEqual(commit.branches, ['me/topic'])
   }))
 
+test('an older unpushed copy does not join a pushed copy of the same subject', () =>
+  withTempDir(root => {
+    const repo = makeRepo(root, 'site', 'git@github.com:acme/site.git')
+    repo.commit('feat: base', '2026-11-09')
+    repo.push('main')
+    repo.run(['switch', '-q', '-c', 'me/old'])
+    repo.commit('feat: shared', '2026-11-11', { file: 'old.txt' })
+    repo.run(['switch', '-q', 'main'])
+    repo.run(['switch', '-q', '-c', 'me/new'])
+    repo.commit('feat: shared', '2026-11-12', { file: 'new.txt' })
+    repo.push('me/new')
+    const commit = collect({ root, ...range })[0].commits.find(item => item.subject === 'feat: shared')
+    assert.equal(commit.unpushed, false)
+    assert.deepEqual(commit.branches, ['me/new'])
+  }))
+
+test('an unmerged copy keeps its review when the numbered copy has none', () => {
+  const [repo] = mergeClones([
+    {
+      name: 'site',
+      url: 'https://github.com/acme/site',
+      commits: [{ subject: 'feat: shared', merged: false, unpushed: false, branches: ['me/a'], review: 'https://github.com/acme/site/pull/3' }]
+    },
+    {
+      name: 'site-copy',
+      url: 'https://github.com/acme/site',
+      commits: [{ subject: 'feat: shared (#9)', merged: false, unpushed: false, branches: ['me/a'], review: null }]
+    }
+  ])
+  assert.equal(repo.commits[0].subject, 'feat: shared (#9)')
+  assert.equal(repo.commits[0].review, 'https://github.com/acme/site/pull/3')
+})
+
 test('collect reports a repository whose git log fails and still returns the others', () =>
   withTempDir(root => {
     seedWorkspace(root)
     mkdirSync(path.join(root, 'broken', '.git'), { recursive: true })
     const repos = collect({ root, ...range })
     assert.deepEqual(repos.map(repo => repo.name), ['api'])
-    assert.match(collectionFailures.join('\n'), /^broken:/m)
+    collect({ root, ...range })
+    assert.equal(collectionFailures.length, 1)
+    assert.match(collectionFailures[0], /^broken:.*fatal/)
+    const cli = runCli('collect.mjs', ['--root', root, '--since', range.since, '--until', range.until, '--author', ME, '--offline'])
+    assert.equal(cli.status, 0, cli.stderr)
+    assert.match(cli.stderr, /collect\.mjs: broken:.*fatal/)
+  }))
+
+test('a git log that exits without stderr still names the repository', () =>
+  withTempDir(root => {
+    seedWorkspace(root)
+    mkdirSync(path.join(root, 'broken', '.git'), { recursive: true })
+    const bin = path.join(root, 'bin')
+    mkdirSync(bin)
+    const realGit = execFileSync('which', ['git'], { encoding: 'utf8' }).trim()
+    writeFileSync(path.join(bin, 'git'), `#!/usr/bin/env node
+import { spawnSync } from 'node:child_process'
+const args = process.argv.slice(2)
+if (args[0] === 'log' && process.cwd().endsWith('/broken')) process.exit(1)
+const result = spawnSync(${JSON.stringify(realGit)}, args, { stdio: 'inherit' })
+process.exit(result.status ?? 1)
+`)
+    chmodSync(path.join(bin, 'git'), 0o755)
+    const cli = runCli('collect.mjs', ['--root', root, '--since', range.since, '--until', range.until, '--author', ME, '--offline'], {
+      PATH: `${bin}${path.delimiter}${process.env.PATH}`
+    })
+    assert.equal(cli.status, 0, cli.stderr)
+    assert.match(cli.stderr, /collect\.mjs: broken: Command failed/)
   }))
 
 test('resolveReviews keeps an older merge when the branch has a newer open request', async () => {

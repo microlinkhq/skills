@@ -28,7 +28,7 @@ Call `notion-get-self`. The workspace it names must be the one holding the Weekl
    SELECT url, "Name", "date:date:start" FROM "collection://..." ORDER BY "date:date:start" DESC LIMIT 8
    ```
 
-2. Pick the meeting. Rows are named `W<n>-<yy>` (e.g. `W40-26`); `<n>` counts meetings, it is not the ISO week. The target is the row the user linked, else the soonest row whose date is today or later. A later row that is further in the future is not this week's meeting.
+2. Pick the meeting. Rows are named `W<n>-<yy>` (e.g. `W40-26`); `<n>` counts meetings, it is not the ISO week. The target is the row the user linked, else the soonest row whose date is today or later. A later row that is further in the future is not this week's meeting. The query is newest first, so if the earliest row on that page is still after today, raise the limit and query again before picking: this week is not on the page.
 3. If every row is in the past, do not guess. Ask the user: fill the newest of those, or create the next one (`W<n + 1>-<yy>` dated the meeting day they name)? Whoever runs the meeting usually creates it, so a missing row often means "not meeting day yet".
 
 ## Step 3: Learn the format from the previous pages
