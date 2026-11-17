@@ -11,6 +11,7 @@ import { promisify } from 'node:util'
 import {
   branchName,
   collect,
+  collectionFailures,
   dedupeKey,
   isGitLab,
   isNoise,
@@ -709,32 +710,33 @@ console.log(JSON.stringify(results))
     })
     assert.equal(child.status, 0, child.stderr)
     const [github, empty, view, fork, list, closed] = JSON.parse(child.stdout)
-    assert.deepEqual(github.review, { state: 'merged', url: 'https://github.com/acme/site/pull/2', mergedAt: null })
+    assert.deepEqual(github.review, [{ state: 'merged', url: 'https://github.com/acme/site/pull/2', mergedAt: null }])
     assert.match(github.log, /--limit 5/)
     assert.match(github.log, /--head me\/fix/)
     assert.match(github.log, /--repo github.com\/acme\/site/)
-    assert.equal(empty.review, null)
-    assert.deepEqual(view.review, { state: 'open', url: 'https://gitlab.com/acme/site/-/merge_requests/12', mergedAt: null })
+    assert.deepEqual(empty.review, [])
+    assert.deepEqual(view.review, [{ state: 'open', url: 'https://gitlab.com/acme/site/-/merge_requests/12', mergedAt: null }])
     assert.match(view.log, /mr view 12/)
     assert.doesNotMatch(view.log, /mr list/)
-    assert.equal(fork.review, null)
-    assert.deepEqual(list.review, { state: 'merged', url: 'https://gitlab.com/acme/site/-/merge_requests/4', mergedAt: '2026-11-13T00:00:00Z' })
+    assert.deepEqual(fork.review, [])
+    assert.deepEqual(list.review, [{ state: 'merged', url: 'https://gitlab.com/acme/site/-/merge_requests/4', mergedAt: '2026-11-13T00:00:00Z' }])
     assert.match(list.log, /mr list/)
     assert.match(list.log, /--source-branch me\/feat/)
-    assert.equal(closed.review.state, 'closed')
-    assert.equal(closed.review.mergedAt, null)
+    assert.equal(closed.review[0].state, 'closed')
+    assert.equal(closed.review[0].mergedAt, null)
   }))
 
 test('checkLinks treats every sign-in path as a wall, and a direct visit as the page itself', () =>
   withServer(
     (req, res) => {
-      const walls = { '/app': '/auth/start', '/go': '/sso?next=1', '/menu': '/session', '/in': '/log-in', '/up': '/sign-in', '/join': '/signin' }
+      const walls = { '/app': '/auth/start', '/go': '/sso?next=1', '/menu': '/session', '/in': '/log-in', '/up': '/sign-in', '/join': '/signin', '/auth/dashboard': '/login' }
       if (walls[req.url]) return res.writeHead(302, { location: walls[req.url] }).end()
       res.writeHead(200).end()
     },
     async origin => {
-      const results = await checkLinks(['/app', '/go', '/menu', '/in', '/up', '/join'].map(pathname => origin + pathname))
-      assert.deepEqual(results.map(result => result.reason), Array(6).fill('redirects to sign-in'))
+      const paths = ['/app', '/go', '/menu', '/in', '/up', '/join', '/auth/dashboard']
+      const results = await checkLinks(paths.map(pathname => origin + pathname))
+      assert.deepEqual(results.map(result => result.reason), Array(paths.length).fill('redirects to sign-in'))
       const [direct] = await checkLinks([`${origin}/login`])
       assert.equal(direct.ok, true)
       assert.equal(direct.reason, null)
@@ -844,6 +846,67 @@ test('upload prints usage unless it is given the url, the headers and the file',
   const bare = runCli('upload.mjs', [])
   assert.equal(bare.status, 1)
   assert.match(bare.stdout, /^Usage:/)
+})
+
+test('a pushed copy wins over a newer unpushed copy of the same subject', () =>
+  withTempDir(root => {
+    const repo = makeRepo(root, 'site', 'git@github.com:acme/site.git')
+    repo.commit('feat: base', '2026-11-09')
+    repo.push('main')
+    repo.run(['switch', '-q', '-c', 'me/old'])
+    repo.commit('feat: shared', '2026-11-11', { file: 'old.txt' })
+    repo.push('me/old')
+    repo.run(['switch', '-q', 'main'])
+    repo.run(['switch', '-q', '-c', 'me/new'])
+    repo.commit('feat: shared', '2026-11-12', { file: 'new.txt' })
+    const commit = collect({ root, ...range })[0].commits.find(item => item.subject === 'feat: shared')
+    assert.equal(commit.unpushed, false)
+    assert.deepEqual(commit.branches, ['me/old'])
+  }))
+
+test('clones keep a pushed copy ahead of an unpushed one', () =>
+  withTempDir(root => {
+    const local = makeRepo(root, 'site', 'git@github.com:acme/site.git')
+    local.commit('feat: base', '2026-11-09')
+    local.push('main')
+    local.run(['switch', '-q', '-c', 'me/local'])
+    local.commit('feat: shared', '2026-11-12', { file: 'local.txt' })
+    const pushed = makeRepo(root, 'site-copy', 'https://github.com/acme/site.git')
+    pushed.commit('feat: base', '2026-11-09')
+    pushed.push('main')
+    pushed.run(['switch', '-q', '-c', 'me/topic'])
+    pushed.commit('feat: shared', '2026-11-11', { file: 'topic.txt' })
+    pushed.push('me/topic')
+    const commit = collect({ root, ...range })[0].commits.find(item => item.subject === 'feat: shared')
+    assert.equal(commit.unpushed, false)
+    assert.deepEqual(commit.branches, ['me/topic'])
+  }))
+
+test('collect reports a repository whose git log fails and still returns the others', () =>
+  withTempDir(root => {
+    seedWorkspace(root)
+    mkdirSync(path.join(root, 'broken', '.git'), { recursive: true })
+    const repos = collect({ root, ...range })
+    assert.deepEqual(repos.map(repo => repo.name), ['api'])
+    assert.match(collectionFailures.join('\n'), /^broken:/m)
+  }))
+
+test('resolveReviews keeps an older merge when the branch has a newer open request', async () => {
+  const repos = [{
+    name: 'site',
+    url: 'https://github.com/acme/site',
+    commits: [
+      pendingCommit('fix: already landed', ['me/reused'], '2026-11-12T12:00:00Z'),
+      pendingCommit('feat: new round', ['me/reused'], '2026-11-15T12:00:00Z')
+    ]
+  }]
+  await resolveReviews(repos, async () => [
+    { state: 'open', url: 'https://github.com/acme/site/pull/9', mergedAt: null },
+    { state: 'merged', url: 'https://github.com/acme/site/pull/4', mergedAt: '2026-11-13T00:00:00Z' }
+  ])
+  const [landed, next] = repos[0].commits
+  assert.deepEqual([landed.merged, landed.review], [true, 'https://github.com/acme/site/pull/4'])
+  assert.deepEqual([next.merged, next.open, next.review], [false, true, 'https://github.com/acme/site/pull/9'])
 })
 
 test('importing a script with no process entry does not crash', () => {

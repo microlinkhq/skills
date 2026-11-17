@@ -23,7 +23,10 @@ export const checkLink = async url => {
   try {
     const response = await fetch(probeUrl(url), { redirect: 'follow', signal: AbortSignal.timeout(TIMEOUT_MS) })
     await response.body?.cancel()
-    const signIn = SIGN_IN_PATH.test(new URL(response.url).pathname + new URL(response.url).search) && !SIGN_IN_PATH.test(url)
+    const final = new URL(response.url)
+    const requested = new URL(url)
+    const redirected = final.pathname !== requested.pathname || final.search !== requested.search
+    const signIn = SIGN_IN_PATH.test(final.pathname + final.search) && (redirected || !SIGN_IN_PATH.test(requested.pathname + requested.search))
     return {
       url,
       status: response.status,

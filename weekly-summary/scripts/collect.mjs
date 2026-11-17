@@ -44,11 +44,22 @@ Git answers first; gh (GitHub) and glab (GitLab) are asked about each pushed bra
 git cannot settle, unless --offline. A failed lookup is reported on stderr, never read as
 "no request".`
 
+const gitText = (cwd, args) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim()
+
 const git = (cwd, args) => {
   try {
-    return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()
+    return gitText(cwd, args)
   } catch {
     return ''
+  }
+}
+
+const gitLog = (cwd, args) => {
+  try {
+    return gitText(cwd, args)
+  } catch (error) {
+    const detail = error.stderr?.toString().trim().split('\n')[0]
+    throw new Error(detail || error.message.split('\n')[0])
   }
 }
 
@@ -69,6 +80,19 @@ export const pullRequestNumber = subject => {
 }
 
 export const dedupeKey = subject => subject.replace(TRAILING_REVIEW_NUMBER, '')
+
+const sameWork = (seen, commit) => {
+  if (seen.unpushed && !commit.unpushed) {
+    seen.unpushed = false
+    seen.branches = [...commit.branches]
+  } else if (Boolean(seen.unpushed) === Boolean(commit.unpushed)) {
+    seen.branches = [...new Set([...seen.branches, ...commit.branches])]
+  }
+  if (pullRequestNumber(commit.subject) && !pullRequestNumber(seen.subject)) {
+    seen.subject = commit.subject
+    if (commit.review) seen.review = commit.review
+  }
+}
 
 export const webUrl = remote => {
   if (!remote) return null
@@ -150,7 +174,7 @@ const describeLocation = ({ pushed, local }) => {
 }
 
 export const collectRepo = (repo, { since, until, authors }) => {
-  const log = git(repo, [
+  const log = gitLog(repo, [
     'log', '--branches', `--remotes=${REMOTE}`, '--no-merges', '--fixed-strings',
     `--since=${since}T00:00:00`, `--until=${until}T00:00:00`,
     ...authors.map(author => `--author=${author}`),
@@ -192,7 +216,7 @@ export const collectRepo = (repo, { since, until, authors }) => {
     if (commit.merged && !seen.merged) {
       byKey.set(key, { ...commit, subject: pullRequestNumber(subject) ? subject : seen.subject })
     } else if (!commit.merged && !seen.merged) {
-      seen.branches = [...new Set([...seen.branches, ...commit.branches])]
+      sameWork(seen, commit)
     }
     const kept = byKey.get(key)
     if (pullRequestNumber(subject) && !pullRequestNumber(kept.subject)) kept.subject = subject
@@ -219,6 +243,8 @@ export const mergeClones = repos => {
         const kept = seen.commits[index]
         const subject = pullRequestNumber(commit.subject) ? commit.subject : kept.subject
         seen.commits[index] = { ...commit, subject, review: pullRequestNumber(commit.subject) ? commit.review : kept.review }
+      } else if (!commit.merged && !seen.commits[index].merged) {
+        sameWork(seen.commits[index], commit)
       } else if (pullRequestNumber(commit.subject) && !pullRequestNumber(seen.commits[index].subject)) {
         seen.commits[index].subject = commit.subject
         seen.commits[index].review = commit.review
@@ -252,17 +278,18 @@ export const lookupReview = async (url, branch) => {
     const found = number
       ? await readJson('glab', ['mr', 'view', number, '-R', url, '--output', 'json'])
       : await readJson('glab', ['mr', 'list', '-R', url, '--source-branch', branch, '--all', '--output', 'json'])
-    const request = (Array.isArray(found) ? found : [found]).find(item => item?.iid && item.source_project_id === item.target_project_id)
-    if (!request) return null
-    return { state: normalizeState(request.state), url: request.web_url ?? reviewUrl(url, request.iid), mergedAt: request.merged_at ?? null }
+    const requests = (Array.isArray(found) ? found : [found]).filter(item => item?.iid && item.source_project_id === item.target_project_id)
+    return requests.map(request => ({ state: normalizeState(request.state), url: request.web_url ?? reviewUrl(url, request.iid), mergedAt: request.merged_at ?? null }))
   }
   const found = await readJson('gh', [
     'pr', 'list', '--repo', forgeRepo(url), '--head', branch, '--state', 'all',
     '--json', 'number,state,url,mergedAt,isCrossRepository', '--limit', String(FORGE_CANDIDATES)
   ])
-  const request = found.find(item => !item.isCrossRepository)
-  if (!request) return null
-  return { state: normalizeState(request.state), url: request.url, mergedAt: request.mergedAt ?? null }
+  return found.filter(item => !item.isCrossRepository).map(request => ({
+    state: normalizeState(request.state),
+    url: request.url,
+    mergedAt: request.mergedAt ?? null
+  }))
 }
 
 const mapWithConcurrency = async (items, limit, task) => {
@@ -306,7 +333,11 @@ export const resolveReviews = async (repos, lookup = lookupReview) => {
   for (const repo of repos) {
     for (const commit of repo.commits) {
       if (commit.merged) continue
-      const reviews = commit.branches.map(branch => reviewOf.get(`${repo.url}\n${branch}`)).filter(Boolean)
+      const reviews = commit.branches.flatMap(branch => {
+        const answer = reviewOf.get(`${repo.url}\n${branch}`)
+        if (!answer) return []
+        return Array.isArray(answer) ? answer : [answer]
+      })
       const mergedReview = reviews.find(review => landedBefore(review, commit))
       if (mergedReview) {
         Object.assign(commit, { merged: true, unpushed: false, branches: [] })
@@ -325,21 +356,30 @@ export const resolveReviews = async (repos, lookup = lookupReview) => {
   return failures
 }
 
-export const collect = ({ root, since, until, authors }) =>
-  mergeClones(
+export let collectionFailures = []
+
+export const collect = ({ root, since, until, authors }) => {
+  collectionFailures = []
+  return mergeClones(
     readdirSync(root, { withFileTypes: true })
       .filter(entry => entry.isDirectory() && existsSync(path.join(root, entry.name, '.git')))
       .sort((a, b) => a.name.localeCompare(b.name))
       .map(entry => {
         const repo = path.join(root, entry.name)
-        return {
-          name: entry.name,
-          url: webUrl(git(repo, ['remote', 'get-url', REMOTE])),
-          commits: collectRepo(repo, { since, until, authors })
+        try {
+          return {
+            name: entry.name,
+            url: webUrl(git(repo, ['remote', 'get-url', REMOTE])),
+            commits: collectRepo(repo, { since, until, authors })
+          }
+        } catch (error) {
+          collectionFailures.push(`${entry.name}: ${error.message}`)
+          return null
         }
       })
-      .filter(repo => repo.commits.length > 0)
+      .filter(repo => repo && repo.commits.length > 0)
   ).sort((a, b) => b.commits.length - a.commits.length || a.name.localeCompare(b.name))
+}
 
 const describeState = commit => {
   if (commit.merged) return 'merged'
@@ -371,6 +411,7 @@ const main = async argv => {
   if (options.authors.length === 0) options.authors = defaultAuthors()
   if (options.authors.length === 0) throw new Error('no --author given and no global git user.name or user.email')
   const repos = collect(options)
+  for (const failure of collectionFailures) console.error(`collect.mjs: ${failure}`)
   const failures = options.offline ? [] : await resolveReviews(repos)
   for (const failure of failures) console.error(`collect.mjs: lookup failed for ${failure}`)
   console.log(options.json ? JSON.stringify(repos, null, 2) : toMarkdown(repos, options))

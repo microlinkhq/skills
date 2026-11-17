@@ -18,7 +18,7 @@ Writes your section of this week's Weekly Meeting page in Notion. Git says what 
 
 ## Step 1: Check the Notion connection
 
-Call `notion-get-self`. The workspace it names must be the one holding the Weekly Meeting database. If fetching the page returns `object_not_found` (404) or searching "Weekly Meeting" returns nothing, the connection is on another workspace (often a personal one). Tell the user to run `/mcp`, pick `notion`, clear authentication, authenticate again, and choose the right workspace in the picker on Notion's consent screen. Stop until they say it is done.
+Call `notion-get-self`. The workspace it names must be the one holding the Weekly Meeting database. If fetching the page returns `object_not_found` (404), the link may be wrong or the page may not be shared with the connection: ask the user to check both before reauthenticating. If searching "Weekly Meeting" returns nothing and the connection's workspace is not the team's, tell the user to run `/mcp`, pick `notion`, clear authentication, authenticate again, and choose the right workspace in the picker on Notion's consent screen. Stop until they say it is done.
 
 ## Step 2: Find this week's page
 
@@ -28,8 +28,8 @@ Call `notion-get-self`. The workspace it names must be the one holding the Weekl
    SELECT url, "Name", "date:date:start" FROM "collection://..." ORDER BY "date:date:start" DESC LIMIT 8
    ```
 
-2. Pick the meeting. Rows are named `W<n>-<yy>` (e.g. `W40-26`); `<n>` counts meetings, it is not the ISO week. The target is the row the user linked, else the newest row **if its date is today or later**.
-3. If the newest row is in the past, do not guess. Ask the user: fill that row, or create the next one (`W<n + 1>-<yy>` dated the meeting day they name)? Whoever runs the meeting usually creates it, so a missing row often means "not meeting day yet".
+2. Pick the meeting. Rows are named `W<n>-<yy>` (e.g. `W40-26`); `<n>` counts meetings, it is not the ISO week. The target is the row the user linked, else the soonest row whose date is today or later. A later row that is further in the future is not this week's meeting.
+3. If every row is in the past, do not guess. Ask the user: fill the newest of those, or create the next one (`W<n + 1>-<yy>` dated the meeting day they name)? Whoever runs the meeting usually creates it, so a missing row often means "not meeting day yet".
 
 ## Step 3: Learn the format from the previous pages
 
