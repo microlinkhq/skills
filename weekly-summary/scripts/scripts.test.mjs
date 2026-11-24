@@ -1018,6 +1018,14 @@ test('importing a script with no process entry does not crash', () => {
   }
 })
 
+test('a missing argv path does not crash the import', () => {
+  for (const script of SCRIPTS) {
+    const child = spawnSync(process.execPath, ['-e', `await import(${JSON.stringify(path.join(HERE, script))})`, '/no/such/file'], { encoding: 'utf8' })
+    assert.equal(child.status, 0, `${script}\n${child.stderr}`)
+    assert.doesNotMatch(child.stdout + child.stderr, /Usage:/, script)
+  }
+})
+
 test('every script runs when its skill folder is a symlink, as skills add installs it', () => {
   const documented = [...readFileSync(path.join(HERE, '..', 'SKILL.md'), 'utf8').matchAll(/scripts\/([\w.-]+\.mjs)/g)]
     .map(match => match[1])

@@ -597,6 +597,14 @@ test('importing a script with no process entry does not crash', () => {
   }
 })
 
+test('a missing argv path does not crash the import', () => {
+  for (const script of SCRIPTS) {
+    const child = spawnSync(process.execPath, ['-e', `await import(${JSON.stringify(path.join(HERE, script))})`, '/no/such/file'], { encoding: 'utf8' })
+    assert.equal(child.status, 0, `${script}\n${child.stderr}`)
+    assert.doesNotMatch(child.stdout + child.stderr, /Usage:/, script)
+  }
+})
+
 test('a file named - is stdin, and node ./- is still the script', () => {
   const linkDir = mkdtempSync(path.join(tmpdir(), 'skill-stdin-'))
   try {
