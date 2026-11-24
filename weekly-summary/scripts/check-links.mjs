@@ -70,6 +70,6 @@ const main = async urls => {
 }
 
 const entry = process.argv[1]
-if (entry && existsSync(entry) && realpathSync(entry) === realpathSync(fileURLToPath(import.meta.url))) {
+if (entry && entry !== '-' && existsSync(entry) && realpathSync(entry) === realpathSync(fileURLToPath(import.meta.url))) {
   process.exitCode = await main(process.argv.slice(2))
 }
