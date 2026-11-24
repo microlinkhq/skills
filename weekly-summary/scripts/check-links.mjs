@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-import { pathToFileURL } from 'node:url'
+import { existsSync, realpathSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 
 const TIMEOUT_MS = 15_000
 const CONCURRENCY = 8
@@ -69,6 +70,6 @@ const main = async urls => {
 }
 
 const entry = process.argv[1]
-if (entry && import.meta.url === pathToFileURL(entry).href) {
+if (entry && existsSync(entry) && realpathSync(entry) === realpathSync(fileURLToPath(import.meta.url))) {
   process.exitCode = await main(process.argv.slice(2))
 }

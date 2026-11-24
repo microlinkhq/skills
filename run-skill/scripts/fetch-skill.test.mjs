@@ -1,6 +1,13 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
+import { mkdtempSync, rmSync, symlinkSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { parseRef, pickSkillEntry } from './fetch-skill.mjs'
+
+const HERE = path.dirname(fileURLToPath(import.meta.url))
 
 test('parseRef: skills.sh URL with skill', () => {
   assert.deepEqual(
@@ -126,4 +133,31 @@ test('pickSkillEntry: unknown skill throws listing skills', () => {
 
 test('pickSkillEntry: no SKILL.md at all throws', () => {
   assert.throws(() => pickSkillEntry(['README.md'], {}), /No SKILL.md found/)
+})
+
+test('every script runs when its skill folder is a symlink, as skills add installs it', () => {
+  const linkDir = mkdtempSync(path.join(tmpdir(), 'skill-symlink-'))
+  const linked = path.join(linkDir, 'scripts')
+  symlinkSync(HERE, linked)
+  try {
+    for (const script of ['fetch-skill.mjs']) {
+      for (const flags of [[], ['--preserve-symlinks-main']]) {
+        const run = spawnSync(process.execPath, [...flags, path.join(linked, script)], { encoding: 'utf8' })
+        assert.equal(run.status, 1, `${script} ${flags}`)
+        assert.match(run.stdout + run.stderr, /Usage:/, `${script} ${flags}`)
+      }
+    }
+  } finally {
+    rmSync(linkDir, { recursive: true, force: true })
+  }
+})
+
+test('every script imports cleanly from a script read on stdin', () => {
+  const run = spawnSync(process.execPath, ['--input-type=module', '-'], {
+    cwd: HERE,
+    encoding: 'utf8',
+    input: "await import('./fetch-skill.mjs')\nconsole.log('imported')"
+  })
+  assert.equal(run.status, 0, run.stderr)
+  assert.equal(run.stdout, 'imported\n')
 })

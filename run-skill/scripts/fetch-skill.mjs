@@ -2,7 +2,8 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { pathToFileURL } from 'node:url'
+import { existsSync, realpathSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import process from 'node:process'
 
 const MAX_FILES = 200
@@ -213,7 +214,7 @@ const main = async () => {
   )
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (process.argv[1] && existsSync(process.argv[1]) && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
   main().catch(error => {
     console.error(error.message)
     process.exit(1)

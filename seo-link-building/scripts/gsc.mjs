@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-import { readFileSync } from 'node:fs'
-import { pathToFileURL } from 'node:url'
+import { existsSync, readFileSync, realpathSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 
 const STRIKING_MIN_POSITION = 10.5
 const STRIKING_MAX_POSITION = 20.5
@@ -136,4 +136,4 @@ const main = args => {
   console.error(`${hits.length} of ${rows.length} rows`)
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main(process.argv.slice(2))
+if (process.argv[1] && existsSync(process.argv[1]) && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) main(process.argv.slice(2))
