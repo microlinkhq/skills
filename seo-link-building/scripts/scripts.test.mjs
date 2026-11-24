@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -11,6 +11,7 @@ import { inboundIndex, listSources, normalizeRoute } from './inbound.mjs'
 import { planEdits } from './apply-edits.mjs'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
+const SCRIPTS = readdirSync(HERE).filter(name => name.endsWith('.mjs') && !name.endsWith('.test.mjs')).sort()
 const TEMPLATE = path.join(HERE, '..', 'templates', 'internal-links.test.mjs')
 
 const withTempDir = run => {
@@ -551,3 +552,78 @@ test('inbound CLI counts default directories and honors flags', () =>
     assert.ok(custom.stdout.startsWith('1\t/from-other'), custom.stdout)
     assert.equal(spawnSync(process.execPath, [bin], { cwd: dir, encoding: 'utf8' }).status, 1)
   }))
+
+test('every script runs when its skill folder is a symlink, as skills add installs it', () => {
+  const documented = [...readFileSync(path.join(HERE, '..', 'SKILL.md'), 'utf8').matchAll(/scripts\/([\w.-]+\.mjs)/g)]
+    .map(match => match[1])
+    .filter(name => !name.endsWith('.test.mjs'))
+  assert.deepEqual(SCRIPTS, [...new Set(documented)].sort())
+  const linkDir = mkdtempSync(path.join(tmpdir(), 'skill-symlink-'))
+  const linked = path.join(linkDir, 'scripts')
+  symlinkSync(HERE, linked)
+  const modes = new Set()
+  try {
+    for (const script of SCRIPTS) {
+      for (const flags of [[], ['--preserve-symlinks-main']]) {
+        modes.add(flags[0] ?? 'plain')
+        const run = spawnSync(process.execPath, [...flags, path.join(linked, script)], { encoding: 'utf8' })
+        assert.equal(run.status, 1, `${script} ${flags}`)
+        assert.match(run.stdout + run.stderr, /Usage:/, `${script} ${flags}`)
+      }
+    }
+  } finally {
+    rmSync(linkDir, { recursive: true, force: true })
+  }
+  assert.deepEqual([...modes].sort(), ['--preserve-symlinks-main', 'plain'])
+})
+
+test('every script imports cleanly from a script read on stdin', () => {
+  const run = spawnSync(process.execPath, ['--input-type=module', '-'], {
+    cwd: HERE,
+    encoding: 'utf8',
+    input: `${SCRIPTS.map(script => `await import('./${script}')`).join('\n')}\nconsole.log('imported')`
+  })
+  assert.equal(run.status, 0, run.stderr)
+  assert.equal(run.stdout, 'imported\n')
+})
+
+test('importing a script with no process entry does not crash', () => {
+  for (const script of SCRIPTS) {
+    const child = spawnSync(process.execPath, ['--throw-deprecation', '--input-type=module'], {
+      encoding: 'utf8',
+      input: `await import(${JSON.stringify(path.join(HERE, script))})\n`
+    })
+    assert.equal(child.status, 0, `${script}\n${child.stderr}`)
+  }
+})
+
+test('a missing argv path does not crash the import', () => {
+  for (const script of SCRIPTS) {
+    const child = spawnSync(process.execPath, ['-e', `await import(${JSON.stringify(path.join(HERE, script))})`, '/no/such/file'], { encoding: 'utf8' })
+    assert.equal(child.status, 0, `${script}\n${child.stderr}`)
+    assert.doesNotMatch(child.stdout + child.stderr, /Usage:/, script)
+  }
+})
+
+test('a file named - is stdin, and node ./- is still the script', () => {
+  const linkDir = mkdtempSync(path.join(tmpdir(), 'skill-stdin-'))
+  try {
+    for (const script of SCRIPTS) {
+      const dash = path.join(linkDir, '-')
+      symlinkSync(path.join(HERE, script), dash)
+      const imported = spawnSync(process.execPath, ['--input-type=module', '-'], {
+        cwd: linkDir,
+        encoding: 'utf8',
+        input: `await import(${JSON.stringify(path.join(HERE, script))})\nconsole.log('imported')\n`
+      })
+      assert.equal(imported.status, 0, `${script}\n${imported.stdout}\n${imported.stderr}`)
+      assert.equal(imported.stdout, 'imported\n', script)
+      const direct = spawnSync(process.execPath, ['./-'], { cwd: linkDir, encoding: 'utf8' })
+      assert.equal(direct.status, 1, `${script} ./-`)
+      assert.match(direct.stdout + direct.stderr, /Usage:/, `${script} ./-`)
+      rmSync(dash)
+    }
+  } finally {
+    rmSync(linkDir, { recursive: true, force: true })
+  }
+})

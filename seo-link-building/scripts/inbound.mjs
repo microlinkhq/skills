@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, realpathSync } from 'node:fs'
 import path from 'node:path'
-import { pathToFileURL } from 'node:url'
+import { fileURLToPath } from 'node:url'
 
 const SOURCE_EXTENSION = /\.(md|mdx|js|jsx|ts|tsx|astro|vue|svelte|html)$/
 const SKIPPED_DIRS = new Set(['node_modules', '.git', '.cache', 'public', 'dist', 'build', '.next'])
@@ -89,4 +89,4 @@ const main = args => {
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main(process.argv.slice(2))
+if (process.argv[1] && process.argv[1] !== '-' && existsSync(process.argv[1]) && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) main(process.argv.slice(2))

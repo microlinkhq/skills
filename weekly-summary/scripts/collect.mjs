@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 import { execFile, execFileSync } from 'node:child_process'
-import { existsSync, readdirSync } from 'node:fs'
+import { existsSync, readdirSync, realpathSync } from 'node:fs'
 import path from 'node:path'
 import { promisify } from 'node:util'
-import { pathToFileURL } from 'node:url'
+import { fileURLToPath } from 'node:url'
 
 const run = promisify(execFile)
 
@@ -422,7 +422,7 @@ const main = async argv => {
 }
 
 const entry = process.argv[1]
-if (entry && import.meta.url === pathToFileURL(entry).href) {
+if (entry && entry !== '-' && existsSync(entry) && realpathSync(entry) === realpathSync(fileURLToPath(import.meta.url))) {
   try {
     process.exitCode = await main(process.argv.slice(2))
   } catch (error) {
