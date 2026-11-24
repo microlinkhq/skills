@@ -1013,7 +1013,7 @@ console.log(JSON.stringify({ result, requested }))
 test('importing a script with no process entry does not crash', () => {
   for (const file of SCRIPTS) {
     const href = pathToFileURL(path.join(HERE, file)).href
-    const child = spawnSync(process.execPath, ['--input-type=module'], { input: `import ${JSON.stringify(href)}\n`, encoding: 'utf8' })
+    const child = spawnSync(process.execPath, ['--throw-deprecation', '--input-type=module'], { input: `import ${JSON.stringify(href)}\n`, encoding: 'utf8' })
     assert.equal(child.status, 0, child.stderr)
   }
 })

@@ -88,4 +88,4 @@ const main = args => {
   console.log(`${edits.length} edits ${args.includes('--dry-run') ? 'would apply' : 'applied'} across ${contents.size} files`)
 }
 
-if (process.argv[1] !== '-' && existsSync(process.argv[1]) && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) main(process.argv.slice(2))
+if (process.argv[1] && process.argv[1] !== '-' && existsSync(process.argv[1]) && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) main(process.argv.slice(2))

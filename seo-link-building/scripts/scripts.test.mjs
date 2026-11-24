@@ -589,7 +589,7 @@ test('every script imports cleanly from a script read on stdin', () => {
 
 test('importing a script with no process entry does not crash', () => {
   for (const script of SCRIPTS) {
-    const child = spawnSync(process.execPath, ['--input-type=module'], {
+    const child = spawnSync(process.execPath, ['--throw-deprecation', '--input-type=module'], {
       encoding: 'utf8',
       input: `await import(${JSON.stringify(path.join(HERE, script))})\n`
     })
