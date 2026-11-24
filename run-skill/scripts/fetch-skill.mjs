@@ -214,7 +214,7 @@ const main = async () => {
   )
 }
 
-if (process.argv[1] && process.argv[1] !== '-' && existsSync(process.argv[1]) && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
+if (process.argv[1] !== '-' && existsSync(process.argv[1]) && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
   main().catch(error => {
     console.error(error.message)
     process.exit(1)

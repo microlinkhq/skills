@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, readdirSync, rmSync, symlinkSync } from 'node:fs'
+import { mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -137,12 +137,18 @@ test('pickSkillEntry: no SKILL.md at all throws', () => {
 })
 
 test('every script runs when its skill folder is a symlink, as skills add installs it', () => {
+  const documented = [...readFileSync(path.join(HERE, '..', 'SKILL.md'), 'utf8').matchAll(/scripts\/([\w.-]+\.mjs)/g)]
+    .map(match => match[1])
+    .filter(name => !name.endsWith('.test.mjs'))
+  assert.deepEqual(SCRIPTS, [...new Set(documented)].sort())
   const linkDir = mkdtempSync(path.join(tmpdir(), 'skill-symlink-'))
   const linked = path.join(linkDir, 'scripts')
   symlinkSync(HERE, linked)
+  const modes = new Set()
   try {
     for (const script of SCRIPTS) {
       for (const flags of [[], ['--preserve-symlinks-main']]) {
+        modes.add(flags[0] ?? 'plain')
         const run = spawnSync(process.execPath, [...flags, path.join(linked, script)], { encoding: 'utf8' })
         assert.equal(run.status, 1, `${script} ${flags}`)
         assert.match(run.stdout + run.stderr, /Usage:/, `${script} ${flags}`)
@@ -151,6 +157,7 @@ test('every script runs when its skill folder is a symlink, as skills add instal
   } finally {
     rmSync(linkDir, { recursive: true, force: true })
   }
+  assert.deepEqual([...modes].sort(), ['--preserve-symlinks-main', 'plain'])
 })
 
 test('every script imports cleanly from a script read on stdin', () => {
@@ -161,6 +168,16 @@ test('every script imports cleanly from a script read on stdin', () => {
   })
   assert.equal(run.status, 0, run.stderr)
   assert.equal(run.stdout, 'imported\n')
+})
+
+test('importing a script with no process entry does not crash', () => {
+  for (const script of SCRIPTS) {
+    const child = spawnSync(process.execPath, ['--input-type=module'], {
+      encoding: 'utf8',
+      input: `await import(${JSON.stringify(path.join(HERE, script))})\n`
+    })
+    assert.equal(child.status, 0, `${script}\n${child.stderr}`)
+  }
 })
 
 test('a file named - is stdin, and node ./- is still the script', () => {

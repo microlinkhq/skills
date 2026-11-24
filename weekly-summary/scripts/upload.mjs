@@ -45,7 +45,7 @@ const main = async argv => {
 }
 
 const entry = process.argv[1]
-if (entry && entry !== '-' && existsSync(entry) && realpathSync(entry) === realpathSync(fileURLToPath(import.meta.url))) {
+if (entry !== '-' && existsSync(entry) && realpathSync(entry) === realpathSync(fileURLToPath(import.meta.url))) {
   try {
     process.exitCode = await main(process.argv.slice(2))
   } catch (error) {
